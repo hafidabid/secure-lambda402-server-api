@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { useHydrated } from "@/lib/hydrated";
 import { useWallet } from "@/lib/wallet";
 import { DOCS, LIVE_RUN_TX, REPO } from "./data";
 import { DataField } from "./data-field";
@@ -11,7 +12,8 @@ import { KeyLink } from "./panel";
 
 function WalletLink() {
   const { status, accountId, connect } = useWallet();
-  if (status === "connected" && accountId) {
+  const hydrated = useHydrated();
+  if (hydrated && status === "connected" && accountId) {
     return <span className="font-readout text-[13px] text-etch-2">{accountId}</span>;
   }
   return (
