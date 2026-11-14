@@ -1,5 +1,5 @@
 export const REPO = "https://github.com/hafidabid/secure-lambda402-server-api";
-export const DOCS = `${REPO}/blob/main/docs/api/integration-guide.md`;
+export const DOCS = "/docs";
 export const API_REFERENCE = `${REPO}/blob/main/docs/api/endpoint-reference.md`;
 export const LIVE_RUN_TX = "https://testnet.nearblocks.io/txns/67fYJJtxNqFM33UeXMWfAvP5ELkp4vDZWnWfQMCJUkXj";
 
@@ -69,12 +69,24 @@ export const USE_CASES: UseCase[] = [
   },
 ];
 
-export const LOOP = [
-  { label: "Find a dataset", from: "agent" },
-  { label: "402 · price", from: "gateway" },
-  { label: "Pay in NEAR", from: "agent" },
-  { label: "Run in the enclave", from: "enclave" },
-  { label: "Score: 0.84", from: "gateway" },
+export const MCP_PACKAGE = "@securelambda/mcp-server";
+
+export const INSTALL = [
+  { client: "Claude Code", file: "Terminal", command: `claude mcp add securelambda -- npx -y ${MCP_PACKAGE}` },
+  { client: "Codex", file: "Terminal", command: `codex mcp add securelambda -- npx -y ${MCP_PACKAGE}` },
+  {
+    client: "Claude Desktop",
+    file: "claude_desktop_config.json → mcpServers",
+    command: `"securelambda": { "command": "npx", "args": ["-y", "${MCP_PACKAGE}"] }`,
+  },
+] as const;
+
+export const AGENT_CHAT = [
+  { kind: "user", text: "Test my churn model on telecom data. Spend at most 0.05 NEAR." },
+  { kind: "tool", name: "list_listings", result: "Telecom churn · 0.02 NEAR per run" },
+  { kind: "tool", name: "quote_evaluation", result: "402 · 0.02 NEAR to the data owner" },
+  { kind: "tool", name: "evaluate", result: "Paid 0.02 NEAR · scored in the enclave" },
+  { kind: "agent", text: "Accuracy 0.79 on the operator’s data. Their data never left the enclave. Receipt is on NEAR." },
 ] as const;
 
 

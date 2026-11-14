@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
-import { LIVE_RUN_TX, REPO } from "./data";
+import { DOCS, LIVE_RUN_TX, REPO } from "./data";
 import { DataField } from "./data-field";
 import { BuiltWith } from "./faq";
 import { SecureLambdaMark } from "./logos";
@@ -37,6 +37,7 @@ export function SiteHeader() {
         <a href="#how" className="hidden h-11 items-center hover:underline md:inline-flex">How it works</a>
         <a href="#use-cases" className="hidden h-11 items-center hover:underline md:inline-flex">Use cases</a>
         <Link href="/listings" className="inline-flex h-11 items-center hover:underline">Catalog</Link>
+        <Link href={DOCS} className="inline-flex h-11 items-center hover:underline">Docs</Link>
         <a href={REPO} className="inline-flex h-11 items-center hover:underline">GitHub</a>
         <WalletLink />
       </nav>

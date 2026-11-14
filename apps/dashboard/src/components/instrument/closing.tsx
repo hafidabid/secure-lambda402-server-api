@@ -47,7 +47,7 @@ export function GetStarted() {
 
 const FOOTER_LINKS = [
   { label: "Catalog", href: "/listings" },
-  { label: "Integration guide", href: DOCS },
+  { label: "Docs", href: DOCS },
   { label: "API reference", href: API_REFERENCE },
   { label: "Live testnet run", href: LIVE_RUN_TX },
   { label: "GitHub", href: REPO },
