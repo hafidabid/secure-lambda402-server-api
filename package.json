@@ -17,6 +17,7 @@
     "test:ci": "npm run test:ci --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "demo": "bash ops/demo.sh",
     "vectors:generate": "npm run vectors:generate --workspace=@securelambda/crypto"
   },
   "devDependencies": {
