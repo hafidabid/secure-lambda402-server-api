@@ -10,6 +10,7 @@ const NAV = [
   { href: "/listings", label: "Datasets" },
   { href: "/sell/new", label: "Sell" },
   { href: "/sell/runs", label: "Runs" },
+  { href: "/docs", label: "Docs" },
 ];
 
 function AccountControl() {

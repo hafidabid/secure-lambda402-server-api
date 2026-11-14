@@ -1,0 +1,58 @@
+export const metadata = {
+  title: "Docs · SecureLambda",
+  description: "Test an AI model on a dataset you can't see, and pay per run on NEAR.",
+};
+
+# SecureLambda docs
+
+Test an AI model on a dataset you can't see. Both files are encrypted in the browser, the model is scored inside an Intel TDX enclave on OutLayer, and only three rounded numbers come out. Each run is paid on NEAR, by a wallet or by an AI agent over x402.
+
+## How a run works
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Model owner
+    participant API as SecureLambda API
+    participant E as Enclave (OutLayer TDX)
+    participant N as NEAR testnet
+    B->>API: POST /v1/listings/lst_9f2c/evaluate
+    API-->>B: 402 Payment Required (quote)
+    B->>API: POST /v1/listings/lst_9f2c/evaluate + X-Payment
+    API-->>B: 202 Accepted, Location: /v1/runs/run_a85a
+    API->>E: sealed dataset + sealed model
+    E-->>API: accuracy 0.89 · auc 0.96 · f1 0.92
+    API->>N: settle the signed payment
+    B->>API: GET /v1/runs/run_a85a
+    API-->>B: 200 OK (result + receipt)
+```
+
+The buyer signs the payment first, but it is only sent to the chain after a successful run. A run that fails is never charged.
+
+## Three ways in
+
+| You want to | Start with |
+|---|---|
+| List a dataset or test a model by hand | The dashboard: [catalog](/listings) or [sell a dataset](/sell/new) |
+| Call the API from your own code | The base URL `https://secure-lambda-api.projectdeadwood.my.id`, all routes under `/v1` |
+| Let an AI agent pay per run | x402 on NEAR: a `402` quote, then a signed `X-Payment` retry |
+
+## Try it
+
+The evaluator's public key is public. Everything you upload is encrypted to it.
+
+```bash
+curl https://secure-lambda-api.projectdeadwood.my.id/v1/evaluator
+```
+
+```json
+{
+  "version": "1.0.0",
+  "project_id": "securelambda/local-evaluator",
+  "wasm_hash": "3fed6aac…",
+  "public_key": "ICkMWdD7…=",
+  "trust_tier": 1
+}
+```
+
+> A real paid run settled on NEAR testnet in transaction [`67fYJJtxNqFM33UeXMWfAvP5ELkp4vDZWnWfQMCJUkXj`](https://testnet.nearblocks.io/txns/67fYJJtxNqFM33UeXMWfAvP5ELkp4vDZWnWfQMCJUkXj). The seller received exactly the price, and the relayer paid only the gas.

@@ -1,0 +1,172 @@
+.docs-prose {
+  max-width: 48rem;
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--color-etch);
+}
+
+.docs-prose > * + * {
+  margin-top: 1.1em;
+}
+
+.docs-prose h1 {
+  font-size: clamp(2.1rem, 4vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.docs-prose h2 {
+  margin-top: 2.6em;
+  padding-top: 1.4em;
+  border-top: 1px solid var(--color-chassis-deep);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+}
+
+.docs-prose h3 {
+  margin-top: 2em;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.docs-prose h2,
+.docs-prose h3 {
+  scroll-margin-top: 5rem;
+}
+
+.docs-prose h1 + p {
+  font-size: 19px;
+  color: var(--color-etch-2);
+}
+
+.docs-prose a {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.docs-prose a:hover {
+  color: var(--color-etch-2);
+}
+
+.docs-prose ul,
+.docs-prose ol {
+  padding-left: 1.3em;
+}
+
+.docs-prose ul {
+  list-style: disc;
+}
+
+.docs-prose ol {
+  list-style: decimal;
+}
+
+.docs-prose li + li {
+  margin-top: 0.35em;
+}
+
+.docs-prose li::marker {
+  color: var(--color-etch-3);
+}
+
+.docs-prose :not(pre) > code {
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--color-chassis-deep);
+  border-radius: 5px;
+  background: var(--color-slot);
+  font-family: var(--font-readout);
+  font-size: 0.84em;
+  overflow-wrap: anywhere;
+}
+
+.docs-prose blockquote {
+  padding: 0.9rem 1.1rem;
+  border: 1px solid var(--color-chassis-deep);
+  border-radius: 10px;
+  background: var(--color-slot);
+  color: var(--color-etch-2);
+}
+
+.docs-code {
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--color-display);
+}
+
+.docs-code figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.6rem 0.45rem 1rem;
+  border-bottom: 1px solid var(--color-display-line);
+  font-family: var(--font-engraved);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-display-dim);
+}
+
+.docs-code pre {
+  overflow-x: auto;
+  padding: 1rem 1.1rem;
+  font-family: var(--font-readout);
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.docs-diagram {
+  overflow-x: auto;
+  padding: 1.25rem;
+  border: 1px solid var(--color-chassis-deep);
+  border-radius: 12px;
+  background: var(--color-slot);
+}
+
+.docs-diagram svg {
+  margin-inline: auto;
+}
+
+.docs-diagram pre {
+  font-family: var(--font-readout);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  color: var(--color-etch-3);
+}
+
+.docs-diagram figcaption {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.docs-table {
+  overflow-x: auto;
+}
+
+.docs-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.docs-table th {
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: 1.5px solid var(--color-etch);
+  text-align: left;
+  font-family: var(--font-engraved);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-etch-3);
+}
+
+.docs-table td {
+  padding: 0.6rem 0.75rem 0.6rem 0;
+  border-bottom: 1px solid var(--color-chassis-deep);
+  vertical-align: top;
+}
