@@ -5,11 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { Bot, Loader2 } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
 import { accountExists, MOCKING } from "@/lib/near";
-import { AgentRequest, parseAgentRequest } from "@/lib/connect-agent";
+import { AgentRequest, connectSteps, parseAgentRequest, type ConnectPhase, type ConnectStepKey, type ConnectStepStatus } from "@/lib/connect-agent";
 import { errorMessage, nearToYocto, shortHash } from "@/lib/format";
-import { Btn, CopyIconButton, Engraved, Led, NearLogo, Page, PageError, PageTitle, Panel, Slot } from "@/components/ui";
-
-type Phase = "checking" | "ready" | "sending" | "done";
+import { Btn, CopyIconButton, Engraved, Led, NearLogo, Page, PageError, PageTitle, Panel, Slot, type LedTone } from "@/components/ui";
 
 const POLL_MS = 3000;
 const POLL_TRIES = 20;
@@ -31,7 +29,7 @@ export function ConnectAgentView() {
   const request = typeof parsed === "string" ? null : parsed;
   const wallet = useWallet();
   const { funded, setFunded, check } = useFunded(request);
-  const [phase, setPhase] = useState<Phase>("checking");
+  const [phase, setPhase] = useState<ConnectPhase>("checking");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -45,6 +43,7 @@ export function ConnectAgentView() {
     setPhase("sending");
     try {
       await wallet.sendNear(request.account, BigInt(nearToYocto(request.budgetNear)));
+      setPhase("confirming");
       if (MOCKING) {
         setFunded(true);
       } else {
@@ -74,21 +73,39 @@ export function ConnectAgentView() {
             by sending more; stop it by sending nothing more.
           </p>
         </Slot>
-        <Slot className="flex flex-wrap items-center gap-3 px-4 py-3.5">
-          <Led tone={statusTone(phase, funded)} pulse={phase === "sending"} />
-          <span className="flex-1 text-[15px] font-medium">{statusLabel(phase, funded)}</span>
-          {!funded && wallet.status !== "connected" && (
-            <Btn variant="outline" className="h-9 px-4 text-[14px]" onClick={wallet.connect} disabled={wallet.status !== "disconnected"}>
-              <NearLogo />
-              Connect wallet
-            </Btn>
-          )}
-          {!funded && wallet.status === "connected" && (
-            <Btn className="h-9 px-4 text-[14px]" onClick={() => void send()} disabled={phase !== "ready"}>
-              {phase === "sending" && <Loader2 className="size-4 animate-spin" />}
-              Send {request.budgetNear} NEAR
-            </Btn>
-          )}
+        <Slot>
+          <ol aria-label="Connection progress">
+            {connectSteps({ walletConnected: wallet.status === "connected", phase, funded }).map(({ key, status }) => (
+              <li key={key} className="flex flex-wrap items-center gap-3 border-b border-chassis-deep/50 px-4 py-3.5 last:border-0">
+                <Led tone={STEP_TONE[status]} pulse={status === "active" && (phase === "sending" || phase === "confirming")} />
+                <span className={status === "pending" ? "flex-1 text-[15px] text-etch-3" : "flex-1 text-[15px] font-medium"}>
+                  {stepLabel(key, request.budgetNear)}
+                  <span className="sr-only"> ({status})</span>
+                </span>
+                {status === "active" && key === "wallet" && (
+                  <Btn variant="outline" className="h-9 px-4 text-[14px]" onClick={wallet.connect} disabled={wallet.status !== "disconnected"}>
+                    <NearLogo />
+                    Connect wallet
+                  </Btn>
+                )}
+                {status === "active" && key === "approve" && (
+                  <Btn className="h-9 px-4 text-[14px]" onClick={() => void send()} disabled={phase !== "ready"}>
+                    {phase === "sending" && <Loader2 className="size-4 animate-spin" />}
+                    {phase === "sending" ? "Approve in your wallet" : `Send ${request.budgetNear} NEAR`}
+                  </Btn>
+                )}
+                {status === "active" && key === "confirm" && phase === "confirming" && (
+                  <span className="flex items-center gap-2 text-[13px] text-etch-3">
+                    <Loader2 className="size-4 animate-spin" />
+                    Waiting for the transfer to land
+                  </span>
+                )}
+                {status === "done" && key === "agent" && (
+                  <span className="w-full pl-[22px] text-[13px] text-etch-2">Ask your agent to check agent_wallet_status, then run.</span>
+                )}
+              </li>
+            ))}
+          </ol>
         </Slot>
         {phase === "done" && !funded && (
           <p className="px-1 text-[13px] text-etch-2">The wallet finished, but the account is not visible on chain yet. Refresh in a minute.</p>
@@ -99,14 +116,11 @@ export function ConnectAgentView() {
   );
 }
 
-function statusTone(phase: Phase, funded: boolean): "ok" | "signal" | "off" {
-  if (funded) return "ok";
-  return phase === "sending" ? "signal" : "off";
-}
+const STEP_TONE: Record<ConnectStepStatus, LedTone> = { done: "ok", active: "signal", pending: "off" };
 
-function statusLabel(phase: Phase, funded: boolean): string {
-  if (funded) return "Funded. Go back to your agent; it can pay now.";
-  if (phase === "checking") return "Checking…";
-  if (phase === "sending") return "Waiting for your wallet…";
-  return "Not funded yet";
+function stepLabel(key: ConnectStepKey, budgetNear: string): string {
+  if (key === "wallet") return "Connect your NEAR wallet";
+  if (key === "approve") return `Send ${budgetNear} NEAR to the agent`;
+  if (key === "confirm") return "Confirm on NEAR testnet";
+  return "Go back to your agent";
 }
