@@ -49,7 +49,7 @@ describe("SellerAllowListGuard", () => {
   });
 
   describe("Edge case: Missing x-account-id header", () => {
-    it("should throw ApiError with FORBIDDEN when x-account-id header is missing", () => {
+    it("should throw ApiError with UNAUTHENTICATED when x-account-id header is missing", () => {
       const configService = {
         get: () => "seller.testnet,hospital.testnet",
       } as unknown as ConfigService<AppConfig, true>;
@@ -59,13 +59,13 @@ describe("SellerAllowListGuard", () => {
 
       expect(() => guard.canActivate(context)).toThrow(ApiError);
       expect(() => guard.canActivate(context)).toThrow(
-        expect.objectContaining({ code: "FORBIDDEN" }),
+        expect.objectContaining({ code: "UNAUTHENTICATED" }),
       );
     });
   });
 
   describe("Edge case: Empty x-account-id header", () => {
-    it("should throw ApiError with FORBIDDEN when x-account-id header is empty", () => {
+    it("should throw ApiError with UNAUTHENTICATED when x-account-id header is empty", () => {
       const configService = {
         get: () => "seller.testnet,hospital.testnet",
       } as unknown as ConfigService<AppConfig, true>;
@@ -75,7 +75,7 @@ describe("SellerAllowListGuard", () => {
 
       expect(() => guard.canActivate(context)).toThrow(ApiError);
       expect(() => guard.canActivate(context)).toThrow(
-        expect.objectContaining({ code: "FORBIDDEN" }),
+        expect.objectContaining({ code: "UNAUTHENTICATED" }),
       );
     });
   });

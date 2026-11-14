@@ -1,11 +1,13 @@
-import { Controller, Get, Headers, HttpCode, Param, Sse } from "@nestjs/common";
+import { Controller, Get, Headers, HttpCode, Param, Sse, UseGuards } from "@nestjs/common";
 import { Observable, interval, map, takeWhile, mergeMap } from "rxjs";
 import { MessageEvent } from "@nestjs/common";
 import { isTerminal } from "@securelambda/schemas";
+import { AuthenticatedGuard } from "../auth/authenticated.guard";
 import { RunsService, toRunDto } from "./runs.service";
 import { PrismaService } from "../common/prisma.service";
 
 @Controller("runs")
+@UseGuards(AuthenticatedGuard)
 export class RunsController {
   private sseInterval: number = 1000; // Default 1000ms, can be overridden for tests
 
@@ -30,8 +32,8 @@ export class RunsController {
    */
   @Get(":id/receipt")
   @HttpCode(200)
-  async getReceipt(@Param("id") id: string) {
-    return this.runsService.getReceipt(id);
+  async getReceipt(@Param("id") id: string, @Headers("x-account-id") accountId: string) {
+    return this.runsService.getReceipt(id, accountId);
   }
 
   /**
@@ -43,7 +45,8 @@ export class RunsController {
    */
   @Sse(":id/events")
   @HttpCode(200)
-  runEvents(@Param("id") runId: string): Observable<MessageEvent> {
+  async runEvents(@Param("id") runId: string, @Headers("x-account-id") accountId: string): Promise<Observable<MessageEvent>> {
+    await this.runsService.getRun(runId, accountId); // 404 for anyone but the buyer, before the stream opens
     return interval(this.sseInterval).pipe(
       mergeMap(async () => {
         // Get the current run state
@@ -75,13 +78,14 @@ export class RunsController {
    */
   @Get(":id")
   @HttpCode(200)
-  async getRun(@Param("id") id: string) {
-    return this.runsService.getRun(id);
+  async getRun(@Param("id") id: string, @Headers("x-account-id") accountId: string) {
+    return this.runsService.getRun(id, accountId);
   }
 }
 
 // Separate controller for seller runs at /v1/seller/runs
 @Controller("seller/runs")
+@UseGuards(AuthenticatedGuard)
 export class SellerRunsController {
   constructor(private readonly runsService: RunsService) {}
 
@@ -89,14 +93,11 @@ export class SellerRunsController {
    * GET /v1/seller/runs
    * Get all runs for listings owned by the given seller.
    * Returns array of { id, buyer_id, state, created_at } (no result field).
-   * Reads seller id from x-account-id header.
+   * The seller id is the authenticated account.
    */
   @Get()
   @HttpCode(200)
-  async getSellerRuns(@Headers("x-account-id") accountId?: string) {
-    if (!accountId) {
-      return [];
-    }
+  async getSellerRuns(@Headers("x-account-id") accountId: string) {
     return this.runsService.getSellerRuns(accountId);
   }
 }
