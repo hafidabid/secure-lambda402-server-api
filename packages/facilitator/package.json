@@ -1,0 +1,27 @@
+{
+  "name": "@securelambda/facilitator",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "jest",
+    "test:ci": "jest --ci --coverage",
+    "lint": "echo no-op"
+  },
+  "dependencies": {
+    "@securelambda/schemas": "0.1.0",
+    "@noble/curves": "^1.6.0",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "testcontainers": "^10.13.2",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.6.3",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.1"
+  }
+}
