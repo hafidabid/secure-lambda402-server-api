@@ -9,3 +9,4 @@ export * from "./attestation";
 export * from "./run";
 export * from "./evaluator-io";
 export * from "./queue";
+export * from "./auth";
