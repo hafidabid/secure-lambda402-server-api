@@ -11,21 +11,23 @@ Test an AI model on a dataset you can't see. Both files are encrypted in the bro
 
 Everything runs on NEAR testnet. Nothing costs real money.
 
-**1. Get a funded testnet account.** Create an account ending in `.testnet` ([how](https://docs.near.org/getting-started/create-account)), then add testnet NEAR from the [faucet](https://near-faucet.io/). With the NEAR CLI, one command does both: `near create-account <you>.testnet --useFaucet`.
+**1. Get a wallet and testnet NEAR.** Install a NEAR wallet browser extension such as [Meteor Wallet](https://meteorwallet.app/), switch it to testnet and create an account ending in `.testnet`. Add testnet NEAR from the [faucet](https://near-faucet.io/); 0.1 NEAR is plenty, since a run costs 0.015 to 0.05 NEAR.
 
 **2. Nothing to wrap by hand.** Runs are paid in wNEAR (`wrap.testnet`), NEAR wrapped 1:1 as a token. If your wallet holds only NEAR, **Run once** asks it to wrap the price first, in the same approval that registers you on the token.
 
-**3. Download the sample kit.** Synthetic data, not real patients.
+**3. Download a model.** Each one matches a listing in the catalog. Synthetic data, not real patients.
 
-| File | Use it as |
-|---|---|
-| [glucose-model.json](/samples/glucose/glucose-model.json) | Buyer: the model to test |
-| [glucose.csv](/samples/glucose/glucose.csv) | Seller: the dataset to list (240 rows) |
-| [glucose-schema.json](/samples/glucose/glucose-schema.json) | Seller: the columns, for reference |
+| Listing | Model | Expected score |
+|---|---|---|
+| Diabetes risk, Hospital A | [diabetes-model.json](/samples/models/diabetes-model.json) | accuracy 0.88 · AUC 0.94 · F1 0.83 |
+| Sepsis early warning, ICU cohort | [sepsis-model.json](/samples/models/sepsis-model.json) | accuracy 0.92 · AUC 0.96 · F1 0.78 |
+| Diabetic retinopathy screening | [retinopathy-model.json](/samples/models/retinopathy-model.json) | accuracy 0.83 · AUC 0.91 · F1 0.70 |
+| Heart failure readmission | [heart-model.json](/samples/models/heart-model.json) | accuracy 0.85 · AUC 0.93 · F1 0.75 |
+| COPD 30-day readmission | [copd-model.json](/samples/models/copd-model.json) | accuracy 0.82 · AUC 0.92 · F1 0.73 |
 
-**4. Test the model as a buyer.** Open **Glucose demo** in the [catalog](/listings), sign in with your wallet, add `glucose-model.json` and choose **Run once**. A successful run shows accuracy `0.89`, AUC `0.96` and F1 `0.92`. The receipt links the payment and the enclave run on the NEAR explorer, and checks that the evaluator that ran is the one the listing pinned.
+**4. Test the model as a buyer.** Open **Diabetes risk, Hospital A** in the [catalog](/listings), sign in with your wallet, add `diabetes-model.json` and choose **Run once**. The run takes 1 to 2 minutes in the enclave and costs 0.02 NEAR. The receipt links the payment and the enclave run on the NEAR explorer, and checks that the evaluator that ran is the one the listing pinned.
 
-**5. List a dataset as a seller.** Open [sell a dataset](/sell/new), give it any name, add `glucose.csv` and set the label column to `y`. Then buy a run on your own listing with the same model.
+**5. List a dataset as a seller.** Open [sell a dataset](/sell/new), give it any name, add [glucose.csv](/samples/glucose/glucose.csv) and set the label column to `y`. Then test [glucose-model.json](/samples/glucose/glucose-model.json) on your own listing; it scores accuracy 0.89, AUC 0.96, F1 0.92.
 
 ## Let Claude pay for runs
 
@@ -39,12 +41,12 @@ cd secure-lambda402-server-api
 npm ci && npm run build
 ```
 
-**2. Add it to your client.** Replace `/ABS/PATH` with the absolute path of the clone. The two caps are in yoctoNEAR: `3000000000000000000000000` is 3 NEAR per run, `10000000000000000000000000` is 10 NEAR for the session.
+**2. Add it to your client.** Replace `/ABS/PATH` with the absolute path of the clone. The two caps are in yoctoNEAR: `50000000000000000000000` is 0.05 NEAR per run, `100000000000000000000000` is 0.1 NEAR for the session.
 
 Claude Code:
 
 ```bash
-claude mcp add --scope user --env SECURELAMBDA_MAX_PER_RUN=3000000000000000000000000 --env SECURELAMBDA_SESSION_BUDGET=10000000000000000000000000 --transport stdio securelambda -- node /ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js
+claude mcp add --scope user --env SECURELAMBDA_MAX_PER_RUN=50000000000000000000000 --env SECURELAMBDA_SESSION_BUDGET=100000000000000000000000 --transport stdio securelambda -- node /ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js
 ```
 
 Claude Desktop, in `claude_desktop_config.json` (then restart the app):
@@ -56,8 +58,8 @@ Claude Desktop, in `claude_desktop_config.json` (then restart the app):
       "command": "node",
       "args": ["/ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js"],
       "env": {
-        "SECURELAMBDA_MAX_PER_RUN": "3000000000000000000000000",
-        "SECURELAMBDA_SESSION_BUDGET": "10000000000000000000000000"
+        "SECURELAMBDA_MAX_PER_RUN": "50000000000000000000000",
+        "SECURELAMBDA_SESSION_BUDGET": "100000000000000000000000"
       }
     }
   }
@@ -73,13 +75,13 @@ args = ["/ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js
 tool_timeout_sec = 240
 
 [mcp_servers.securelambda.env]
-SECURELAMBDA_MAX_PER_RUN = "3000000000000000000000000"
-SECURELAMBDA_SESSION_BUDGET = "10000000000000000000000000"
+SECURELAMBDA_MAX_PER_RUN = "50000000000000000000000"
+SECURELAMBDA_SESSION_BUDGET = "100000000000000000000000"
 ```
 
-**3. Connect Claude's wallet.** Ask Claude: *"Connect a SecureLambda agent wallet with 3 NEAR."* It generates a key on your computer and gives you a link. Open it, connect your wallet and send the amount; the page shows each step until the transfer lands. Claude can spend at most what you send, and nothing in your own account.
+**3. Connect Claude's wallet.** Ask Claude: *"Connect a SecureLambda agent wallet with 0.1 NEAR."* It generates a key on your computer and gives you a link. Open it, connect your wallet and send the amount; the page shows each step until the transfer lands. Claude can spend at most what you send, and nothing in your own account.
 
-**4. Ask for a run.** Upload your model on the dashboard first (the MCP server does not upload models), then ask: *"Test model `mdl_…` on the Glucose demo listing, pay at most 3 NEAR."* Claude quotes the run, wraps NEAR into wNEAR if needed, pays, and returns the metrics and the receipt.
+**4. Ask for a run.** Upload your model on the dashboard first (the MCP server does not upload models), then ask: *"Test model `mdl_…` on Diabetes risk, Hospital A, pay at most 0.05 NEAR."* Claude quotes the run, wraps NEAR into wNEAR if needed, pays, and returns the metrics and the receipt.
 
 ## How a run works
 

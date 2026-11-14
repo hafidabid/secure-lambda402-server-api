@@ -1,0 +1,15 @@
+{
+  "features": [
+    "age",
+    "ejection_fraction",
+    "creatinine",
+    "sodium"
+  ],
+  "weights": [
+    0.04236,
+    -0.105181,
+    1.984636,
+    -0.151157
+  ],
+  "bias": 18.648537
+}

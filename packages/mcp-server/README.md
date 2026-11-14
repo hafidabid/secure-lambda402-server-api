@@ -68,8 +68,8 @@ claude mcp add --scope user \
   --env SECURELAMBDA_API_URL=https://secure-lambda-api.projectdeadwood.my.id \
   --env NEAR_ACCOUNT_ID=my-agent.testnet \
   --env NEAR_PRIVATE_KEY=ed25519:... \
-  --env SECURELAMBDA_MAX_PER_RUN=3000000000000000000000000 \
-  --env SECURELAMBDA_SESSION_BUDGET=10000000000000000000000000 \
+  --env SECURELAMBDA_MAX_PER_RUN=50000000000000000000000 \
+  --env SECURELAMBDA_SESSION_BUDGET=100000000000000000000000 \
   --transport stdio securelambda -- node /ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js
 ```
 
@@ -89,8 +89,8 @@ Keep an option such as `--transport stdio` between the last `--env` and the serv
         "SECURELAMBDA_API_URL": "https://secure-lambda-api.projectdeadwood.my.id",
         "NEAR_ACCOUNT_ID": "my-agent.testnet",
         "NEAR_PRIVATE_KEY": "ed25519:...",
-        "SECURELAMBDA_MAX_PER_RUN": "3000000000000000000000000",
-        "SECURELAMBDA_SESSION_BUDGET": "10000000000000000000000000"
+        "SECURELAMBDA_MAX_PER_RUN": "50000000000000000000000",
+        "SECURELAMBDA_SESSION_BUDGET": "100000000000000000000000"
       }
     }
   }
@@ -113,8 +113,8 @@ tool_timeout_sec = 240
 SECURELAMBDA_API_URL = "https://secure-lambda-api.projectdeadwood.my.id"
 NEAR_ACCOUNT_ID = "my-agent.testnet"
 NEAR_PRIVATE_KEY = "ed25519:..."
-SECURELAMBDA_MAX_PER_RUN = "3000000000000000000000000"
-SECURELAMBDA_SESSION_BUDGET = "10000000000000000000000000"
+SECURELAMBDA_MAX_PER_RUN = "50000000000000000000000"
+SECURELAMBDA_SESSION_BUDGET = "100000000000000000000000"
 ```
 
 `evaluate` polls the run for up to 3 minutes, so raise `tool_timeout_sec` above Codex's default. The CLI equivalent is `codex mcp add securelambda --env KEY=VALUE ... -- node /ABS/PATH/.../dist/index.js`.

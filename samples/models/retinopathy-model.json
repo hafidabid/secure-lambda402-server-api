@@ -1,0 +1,15 @@
+{
+  "features": [
+    "age",
+    "diabetes_years",
+    "hba1c",
+    "systolic_bp"
+  ],
+  "weights": [
+    0.037611,
+    0.225051,
+    0.683649,
+    0.030658
+  ],
+  "bias": -14.299088
+}

@@ -1,0 +1,15 @@
+{
+  "features": [
+    "age",
+    "fev1_percent",
+    "prior_admissions",
+    "oxygen_use"
+  ],
+  "weights": [
+    0.047214,
+    -0.080592,
+    0.881378,
+    1.475382
+  ],
+  "bias": -1.394307
+}

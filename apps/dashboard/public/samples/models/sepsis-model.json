@@ -1,0 +1,15 @@
+{
+  "features": [
+    "heart_rate",
+    "temperature",
+    "wbc",
+    "lactate"
+  ],
+  "weights": [
+    0.044726,
+    0.755243,
+    0.158043,
+    1.351549
+  ],
+  "bias": -38.334232
+}
