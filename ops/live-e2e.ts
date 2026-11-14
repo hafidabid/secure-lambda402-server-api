@@ -14,12 +14,11 @@
  *
  * Prints only account ids, hashes and balances. Never keys.
  */
-import { randomUUID } from "node:crypto";
 import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import { BuyerAgentClient, createNearLogin, createNearPaymentSigner } from "@securelambda/agent-sdk";
-import { sealFile } from "@securelambda/crypto";
 import { NearRpcReader, ensureRegisteredOnToken, randomNearPrivateKey, signDelegatePayment, signNep413, unwrapNear } from "@securelambda/facilitator";
-import type { SignedPayment } from "@securelambda/schemas";
+import { EvaluatorMetadataSchema, type SignedPayment } from "@securelambda/schemas";
+import { createChecks, expectedMetrics, fmtNear as fmt, makeApi, makeData, publishSealedListing, uploadSealedModel } from "./e2e-kit";
 
 function env(name: string): string {
   const v = process.env[name];
@@ -37,68 +36,14 @@ const RELAYER = env("RELAYER_ACCOUNT");
 const PRICE = 10n ** 22n; // 0.01 NEAR (wNEAR has the same 24 decimals)
 const near = new NearRpcReader(RPC);
 
-let passed = 0;
-function check(label: string, ok: boolean, detail = ""): void {
-  if (!ok) throw new Error(`FAILED: ${label} ${detail}`);
-  passed += 1;
-  console.log(`  ✓ ${label}${detail ? `  (${detail})` : ""}`);
-}
-const step = (title: string) => console.log(`\n== ${title}`);
-const fmt = (yocto: bigint) => `${Number(yocto / 10n ** 20n) / 1e4} NEAR`;
-
 // One real NEP-413 login per account, reused. All three accounts accept the same full-access key.
 const logins = new Map<string, () => Promise<Record<string, string>>>();
 const loginFor = (account: string) => {
   if (!logins.has(account)) logins.set(account, createNearLogin({ baseUrl: API, accountId: account, privateKey: NEAR_KEY }));
   return logins.get(account)!;
 };
-
-async function api(path: string, init: RequestInit & { account?: string; spoofAccountHeader?: string } = {}) {
-  const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
-  if (init.account) Object.assign(headers, await loginFor(init.account)());
-  if (init.spoofAccountHeader) headers["x-account-id"] = init.spoofAccountHeader;
-  const res = await fetch(`${API}/v1${path}`, { ...init, headers });
-  const text = await res.text();
-  let body: any;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    body = text;
-  }
-  return { status: res.status, body };
-}
-
-// ---- tiny deterministic dataset + the model we will score it with ----
-function makeData(n: number) {
-  let seed = 42;
-  const rnd = () => ((seed = (seed * 1664525 + 1013904223) % 2 ** 32) / 2 ** 32);
-  const rows: { age: number; glucose: number; y: 0 | 1 }[] = [];
-  for (let i = 0; i < n; i++) {
-    const age = 20 + Math.floor(rnd() * 60);
-    const glucose = Math.round((70 + rnd() * 130) * 10) / 10;
-    const score = (glucose - 120) / 25 + (age - 50) / 30 + (rnd() - 0.5) * 2.2;
-    rows.push({ age, glucose, y: score > 0 ? 1 : 0 });
-  }
-  return rows;
-}
-const MODEL = { features: ["age", "glucose"], weights: [0.03, 0.04], bias: -6.2 };
-const sigmoid = (z: number) => 1 / (1 + Math.exp(-z));
-
-function expectedMetrics(rows: ReturnType<typeof makeData>) {
-  const p = rows.map((r) => sigmoid(MODEL.weights[0]! * r.age + MODEL.weights[1]! * r.glucose + MODEL.bias));
-  const pred = p.map((x) => (x >= 0.5 ? 1 : 0));
-  const tp = rows.filter((r, i) => r.y === 1 && pred[i] === 1).length;
-  const fp = rows.filter((r, i) => r.y === 0 && pred[i] === 1).length;
-  const fn = rows.filter((r, i) => r.y === 1 && pred[i] === 0).length;
-  const accuracy = rows.filter((r, i) => r.y === pred[i]).length / rows.length;
-  const f1 = tp === 0 ? 0 : (2 * tp) / (2 * tp + fp + fn);
-  // AUC = P(score_pos > score_neg), ties count half.
-  const pos = p.filter((_, i) => rows[i]!.y === 1);
-  const neg = p.filter((_, i) => rows[i]!.y === 0);
-  let wins = 0;
-  for (const a of pos) for (const b of neg) wins += a > b ? 1 : a === b ? 0.5 : 0;
-  return { accuracy, auc: wins / (pos.length * neg.length), f1 };
-}
+const api = makeApi(API, (account) => loginFor(account)());
+const { check, step, passed } = createChecks();
 
 async function sellerTokenAfterSettle(before: bigint, expectedDelta: bigint): Promise<bigint> {
   // "final" finality can trail the transaction by a couple of blocks.
@@ -118,38 +63,12 @@ async function main() {
   check(`${SELLER} can receive ${TOKEN}`, await near.isRegisteredOnToken(TOKEN, SELLER));
 
   step("1. Service is up and exposes the evaluator");
-  const evaluator = (await api("/evaluator")).body;
+  const evaluator = EvaluatorMetadataSchema.parse((await api("/evaluator")).body);
   check("GET /v1/evaluator returns version + public key", !!evaluator.public_key && !!evaluator.wasm_hash, `v${evaluator.version}`);
-  const evPub = Buffer.from(evaluator.public_key, "base64");
 
   step("2. Seller creates, seals and publishes a listing");
   const rows = makeData(240);
-  const csv = ["age,glucose,y", ...rows.map((r) => `${r.age},${r.glucose},${r.y}`)].join("\n") + "\n";
-  const created = await api("/listings", {
-    method: "POST",
-    account: SELLER,
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      name: `live-e2e-${randomUUID().slice(0, 8)}`,
-      schema: { task: "binary_classification", features: [{ name: "age", type: "int" }, { name: "glucose", type: "float" }], label: "y" },
-      sample_rows: rows.slice(0, 5).map((r) => ({ age: r.age, glucose: r.glucose, y: r.y })),
-      price_amount: PRICE.toString(),
-      price_asset: "near",
-      rules: { min_rows: 100, min_class_count: 20, round: 2, metrics: ["accuracy", "auc", "f1"], runs_per_day: 20, lifetime_budget: 100 },
-      evaluator_version: evaluator.version,
-    }),
-  });
-  check("listing created as draft", created.status === 201, `HTTP ${created.status} ${created.status !== 201 ? JSON.stringify(created.body) : ""}`);
-  const listingId: string = created.body.id;
-
-  const sealedData = sealFile(Buffer.from(csv), evPub, { listing: listingId, role: "dataset", ev: evaluator.version });
-  const dsForm = new FormData();
-  dsForm.set("ciphertext", new Blob([sealedData.blob]), "dataset.bin");
-  dsForm.set("wrapped_key", JSON.stringify(sealedData.envelope));
-  const dsUp = await api(`/listings/${listingId}/dataset`, { method: "POST", account: SELLER, body: dsForm });
-  check("sealed dataset uploaded", dsUp.status === 201 || dsUp.status === 200, `HTTP ${dsUp.status} ${dsUp.status >= 300 ? JSON.stringify(dsUp.body) : ""}`);
-  const published = await api(`/listings/${listingId}/publish`, { method: "POST", account: SELLER });
-  check("listing published", published.status === 200 && published.body.status === "published", `HTTP ${published.status}`);
+  const { listingId, sealedBlob } = await publishSealedListing(api, check, { seller: SELLER, evaluator, rows, price: PRICE, namePrefix: "live-e2e" });
 
   step("3. Ciphertext really is ciphertext in Cloudflare R2");
   const s3 = new S3Client({
@@ -164,17 +83,11 @@ async function main() {
   check("objects were written under the configured prefix", keys.length >= 1, `${keys.length} object(s) under "${prefix}"`);
   const obj = await s3.send(new GetObjectCommand({ Bucket: env("STORAGE_BUCKET"), Key: keys[0]! }));
   const stored = Buffer.from(await obj.Body!.transformToByteArray());
-  check("stored bytes equal the sealed blob", stored.equals(sealedData.blob));
+  check("stored bytes equal the sealed blob", stored.equals(sealedBlob));
   check("stored bytes do not contain the plaintext CSV header", !stored.includes(Buffer.from("age,glucose")));
 
   step("4. Buyer uploads a sealed model");
-  const sealedModel = sealFile(Buffer.from(JSON.stringify(MODEL)), evPub, { listing: listingId, role: "model", ev: evaluator.version });
-  const mForm = new FormData();
-  mForm.set("ciphertext", new Blob([sealedModel.blob]), "model.bin");
-  mForm.set("wrapped_key", JSON.stringify(sealedModel.envelope));
-  const mUp = await api(`/listings/${listingId}/models`, { method: "POST", account: BUYER, body: mForm });
-  check("sealed model uploaded", mUp.status < 300, `HTTP ${mUp.status} ${mUp.status >= 300 ? JSON.stringify(mUp.body) : ""}`);
-  const modelId: string = mUp.body.id ?? mUp.body.model_id;
+  const modelId = await uploadSealedModel(api, check, { buyer: BUYER, listingId, evaluator });
 
   step("5. Pay-per-run with a real NEAR payment");
   const first = await api(`/listings/${listingId}/evaluate`, {
@@ -304,7 +217,7 @@ async function main() {
     }
   }
 
-  console.log(`\nALL ${passed} CHECKS PASSED`);
+  console.log(`\nALL ${passed()} CHECKS PASSED`);
 }
 
 main().catch((err) => {
