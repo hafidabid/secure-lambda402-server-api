@@ -98,7 +98,9 @@ No “100% private” claim: the operator-set key and attestation-verification l
 
 ## Run locally
 
-Requirements: Node.js 20+, npm, Docker, and Rust only if you want to run the Rust evaluator.
+**Fastest check:** `npm install && npm run demo` runs one paid evaluation end to end on this machine, with no NEAR account: client-side encryption, the x402 quote, a signed payment, the real Rust evaluator and settlement on a local sandbox ledger. It needs Docker and Rust and prints `ALL 22 CHECKS PASSED`. See [`AGENTS.md`](AGENTS.md) for what each check proves.
+
+To run the services yourself: Node.js 20+, npm, Docker, and Rust only if you want to run the Rust evaluator.
 
 ```bash
 npm install
