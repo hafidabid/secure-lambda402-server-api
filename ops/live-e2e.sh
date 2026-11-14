@@ -81,7 +81,9 @@ console.log(`export EVALUATOR_PUBLIC_KEY_B64=${publicKey.toString("base64")}`);
 fi
 
 echo "== building packages, migrating and seeding"
-npm run build --silent >/dev/null
+# Backend only: the dashboard is a Next.js app that cannot build under NODE_ENV=development and is not needed here.
+npm run build:libs --silent >/dev/null
+npm run build --silent -w @securelambda/api -w @securelambda/worker >/dev/null
 npm run prisma:migrate:deploy --silent --workspace=@securelambda/db >/dev/null
 export TS_NODE_PROJECT="$PWD/ops/tsconfig.json"
 npx ts-node ops/seed.ts >/dev/null
