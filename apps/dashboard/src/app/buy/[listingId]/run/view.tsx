@@ -8,6 +8,8 @@ import { useListing } from "@/lib/queries";
 import { useSession } from "@/lib/session";
 import { API_URL, evaluate } from "@/lib/api";
 import { errorMessage, formatNear } from "@/lib/format";
+import { isRegisteredOnToken, tokenBalance, waitForTokenBalance } from "@/lib/near";
+import { planWrap } from "@/lib/wrap-plan";
 import { Btn, CopyIconButton, Crumb, Display, Engraved, Led, Page, PageError, PageTitle, Panel, Skeleton, Slot } from "@/components/ui";
 import { SignedInAction } from "@/components/gate";
 
@@ -28,10 +30,11 @@ const { result, receipt } = await agent.evaluate("${listingId}", "${modelId}");
 // result.metrics: { accuracy, auc, f1 }`;
 }
 
-type Phase = "idle" | "quoting" | "signing" | "starting";
+type Phase = "idle" | "quoting" | "wrapping" | "signing" | "starting";
 
 const PHASE_LABEL: Record<Exclude<Phase, "idle">, string> = {
   quoting: "Getting the price…",
+  wrapping: "Wrapping NEAR into wNEAR…",
   signing: "Signing the payment…",
   starting: "Starting the run…",
 };
@@ -110,6 +113,18 @@ export function BuyRunView() {
       }
       const accept = first.quote.accepts[0];
       if (!accept) throw new Error("The server sent no price quote.");
+      const token = accept.assetContract;
+      const buyer = session.accountId;
+      if (token && buyer) {
+        const price = BigInt(accept.maxAmountRequired);
+        const [balance, registered] = await Promise.all([tokenBalance(token, buyer), isRegisteredOnToken(token, buyer)]);
+        const plan = planWrap({ price, balance, registered });
+        if (plan) {
+          setPhase("wrapping");
+          await session.wallet.wrapNear(token, plan);
+          await waitForTokenBalance(token, buyer, price);
+        }
+      }
       setPhase("signing");
       const payment = await session.signPayment(accept);
       setPhase("starting");
@@ -154,7 +169,10 @@ export function BuyRunView() {
               {phase === "idle" ? "Run once" : PHASE_LABEL[phase]}
             </Btn>
           </SignedInAction>
-          <span className="text-center text-[13px] text-etch-3">You pay only when a score is delivered. Failed runs are free.</span>
+          <span className="text-center text-[13px] text-etch-3">
+            You pay only when a score is delivered. Failed runs are free. If you hold only NEAR, your wallet first wraps the price
+            into wNEAR in one approval.
+          </span>
         </Panel>
 
         <section className="flex min-w-0 flex-col gap-3">

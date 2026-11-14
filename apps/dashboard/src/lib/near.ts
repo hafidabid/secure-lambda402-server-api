@@ -38,6 +38,39 @@ export async function accountExists(accountId: string): Promise<boolean> {
   return result !== null;
 }
 
+const CallResultSchema = z.object({ result: z.array(z.number()) });
+
+async function viewCall(contract: string, method: string, args: Record<string, unknown>): Promise<unknown> {
+  const result = await rpc("query", {
+    request_type: "call_function",
+    finality: "final",
+    account_id: contract,
+    method_name: method,
+    args_base64: btoa(JSON.stringify(args)),
+  });
+  return JSON.parse(new TextDecoder().decode(new Uint8Array(CallResultSchema.parse(result).result)));
+}
+
+export async function tokenBalance(contract: string, accountId: string): Promise<bigint> {
+  if (MOCKING) return BigInt(0);
+  return BigInt(z.string().parse(await viewCall(contract, "ft_balance_of", { account_id: accountId })));
+}
+
+export async function isRegisteredOnToken(contract: string, accountId: string): Promise<boolean> {
+  if (MOCKING) return false;
+  return (await viewCall(contract, "storage_balance_of", { account_id: accountId })) !== null;
+}
+
+// The gateway checks balances at "final" finality, which trails a fresh wrap by a few seconds.
+export async function waitForTokenBalance(contract: string, accountId: string, atLeast: bigint, timeoutMs = 60_000): Promise<void> {
+  if (MOCKING) return;
+  const deadline = Date.now() + timeoutMs;
+  while ((await tokenBalance(contract, accountId)) < atLeast) {
+    if (Date.now() > deadline) throw new Error("The wrapped NEAR has not arrived yet. Wait a moment and run again.");
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
+
 export async function blockHeight(): Promise<number> {
   if (MOCKING) return 1_000;
   return BlockSchema.parse(await rpc("block", { finality: "final" })).header.height;

@@ -13,12 +13,7 @@ Everything runs on NEAR testnet. Nothing costs real money.
 
 **1. Get a funded testnet account.** Create an account ending in `.testnet` ([how](https://docs.near.org/getting-started/create-account)), then add testnet NEAR from the [faucet](https://near-faucet.io/). With the NEAR CLI, one command does both: `near create-account <you>.testnet --useFaucet`.
 
-**2. Turn some NEAR into wNEAR.** Runs are paid in wNEAR (`wrap.testnet`), which is NEAR wrapped 1:1 as a token. Register once, then wrap a little more than the price of a run:
-
-```bash
-near contract call-function as-transaction wrap.testnet storage_deposit json-args '{"registration_only":true}' prepaid-gas '30 Tgas' attached-deposit '0.00125 NEAR' sign-as <you>.testnet network-config testnet sign-with-keychain send
-near contract call-function as-transaction wrap.testnet near_deposit json-args '{}' prepaid-gas '30 Tgas' attached-deposit '3 NEAR' sign-as <you>.testnet network-config testnet sign-with-keychain send
-```
+**2. Nothing to wrap by hand.** Runs are paid in wNEAR (`wrap.testnet`), NEAR wrapped 1:1 as a token. If your wallet holds only NEAR, **Run once** asks it to wrap the price first, in the same approval that registers you on the token.
 
 **3. Download the sample kit.** Synthetic data, not real patients.
 

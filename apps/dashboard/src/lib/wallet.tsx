@@ -10,6 +10,7 @@ import { setupIntearWallet } from "@near-wallet-selector/intear-wallet";
 import { setupHotWallet } from "@near-wallet-selector/hot-wallet";
 import "@near-wallet-selector/modal-ui/styles.css";
 import { MOCKING, NEAR_NETWORK } from "./near";
+import type { WrapPlan } from "./wrap-plan";
 
 type WalletStatus = "loading" | "disconnected" | "connecting" | "connected";
 
@@ -28,6 +29,7 @@ export interface Wallet {
   addFullAccessKey: (publicKey: string) => Promise<void>;
   deleteKey: (publicKey: string) => Promise<void>;
   sendNear: (receiverId: string, amountYocto: bigint) => Promise<void>;
+  wrapNear: (tokenContract: string, plan: WrapPlan) => Promise<void>;
 }
 
 const WalletContext = createContext<Wallet | null>(null);
@@ -59,11 +61,29 @@ function useDemoWallet(): Wallet {
     addFullAccessKey: () => tick(700),
     deleteKey: () => tick(500),
     sendNear: () => tick(900),
+    wrapNear: () => tick(900),
   };
 }
 
 function keyAction(action: InternalAction) {
   return [internalActionToNaj(action)];
+}
+
+const WRAP_GAS = "30000000000000";
+// NEP-145 refunds whatever exceeds the token's real storage minimum when registration_only is set.
+const STORAGE_DEPOSIT_YOCTO = "12500000000000000000000";
+
+function wrapActions(accountId: string, { register, wrapYocto }: WrapPlan): InternalAction[] {
+  const deposit: InternalAction = {
+    type: "FunctionCall",
+    params: { methodName: "near_deposit", args: {}, gas: WRAP_GAS, deposit: wrapYocto.toString() },
+  };
+  if (!register) return [deposit];
+  const registration: InternalAction = {
+    type: "FunctionCall",
+    params: { methodName: "storage_deposit", args: { account_id: accountId, registration_only: true }, gas: WRAP_GAS, deposit: STORAGE_DEPOSIT_YOCTO },
+  };
+  return [registration, deposit];
 }
 
 function useSelectorWallet(enabled: boolean): Wallet {
@@ -124,6 +144,13 @@ function useSelectorWallet(enabled: boolean): Wallet {
       await (await activeWallet()).signAndSendTransaction({
         receiverId,
         actions: keyAction({ type: "Transfer", params: { deposit: amountYocto.toString() } }),
+      });
+    },
+    wrapNear: async (tokenContract, plan) => {
+      if (!accountId) throw new Error("Wallet not connected");
+      await (await activeWallet()).signAndSendTransaction({
+        receiverId: tokenContract,
+        actions: wrapActions(accountId, plan).map(internalActionToNaj),
       });
     },
   };
