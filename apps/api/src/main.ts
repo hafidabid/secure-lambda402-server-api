@@ -1,9 +1,10 @@
 import "reflect-metadata";
+import { Logger } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module";
 import { ApiErrorFilter } from "./common/api-error.filter";
-import { loadConfig } from "./config";
+import { loadConfig, sellerAllowList } from "./config";
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
@@ -21,6 +22,10 @@ async function bootstrap(): Promise<void> {
     exposedHeaders: ["location"],
     maxAge: 600,
   });
+
+  if (sellerAllowList(config).size === 0) {
+    Logger.warn("SELLER_ALLOW_LIST is empty: any signed-in account can create and publish listings", "Bootstrap");
+  }
 
   await app.listen(config.PORT);
 }

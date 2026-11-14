@@ -6,7 +6,8 @@ import { sellerAllowList, type AppConfig } from "../config";
 
 /**
  * Guard that checks if the authenticated account (resolved by AuthMiddleware into x-account-id) is in the seller allow-list.
- * Implements fail-closed: if the header is missing or the account is not in the allow-list, access is denied.
+ * A missing account is always refused. A non-empty list restricts seller routes to its accounts; an empty list
+ * (the default) leaves them open to any signed-in account.
  * (docs/03 A5/FR-14)
  */
 @Injectable()
@@ -26,8 +27,8 @@ export class SellerAllowListGuard implements CanActivate {
     const rawAllowList = this.configService.get<string>("SELLER_ALLOW_LIST", "");
     const allowList = sellerAllowList({ SELLER_ALLOW_LIST: rawAllowList } as AppConfig);
 
-    // Check if account is in allow-list
-    if (!allowList.has(accountId)) {
+    // An empty list means no restriction; any signed-in account may create and publish listings.
+    if (allowList.size > 0 && !allowList.has(accountId)) {
       throw new ApiError("FORBIDDEN", "account is not on the seller allow-list");
     }
 
