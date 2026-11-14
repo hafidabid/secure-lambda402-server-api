@@ -84,6 +84,18 @@ This repo contains a working dashboard, API, worker, evaluator, and agent SDK. T
 
 No “100% private” claim: the operator-set key and attestation-verification limits are part of the trust model. A local evaluator run is useful for development and end-to-end payment tests, but it is not a TEE run.
 
+## Business model and roadmap
+
+**Who pays.** The model builder pays per run. The seller sets the price on the listing, in wNEAR; the full amount settles to the seller only after a successful run, and failed runs cost nothing. SecureLambda takes no fee today.
+
+**Roadmap**, in the order that closes the trust gaps above:
+
+1. Tier 2 key custody: generate the evaluator key inside the enclave, so no operator ever holds it.
+2. Verify the Intel TDX quote in the service, not only the WASM hash OutLayer reports.
+3. State-based OutLayer input, so datasets larger than a NEAR transaction can be evaluated.
+4. Model formats beyond logistic-regression JSON.
+5. NEAR mainnet payments.
+
 ## Run locally
 
 Requirements: Node.js 20+, npm, Docker, and Rust only if you want to run the Rust evaluator.

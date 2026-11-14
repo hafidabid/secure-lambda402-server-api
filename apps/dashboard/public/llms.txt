@@ -1,0 +1,24 @@
+# SecureLambda
+
+> Pay-per-run private model evaluation on NEAR. A seller lists an encrypted dataset, a buyer uploads an encrypted logistic-regression model, and an evaluator (OutLayer TEE or local) returns only rounded accuracy, AUC and F1. Payment follows x402: the API answers 402 with a quote, the buyer signs a NEP-366 delegate for a wNEAR `ft_transfer`, and the payment settles to the seller only after a successful run. NEAR testnet only.
+
+- API base URL: https://secure-lambda-api.projectdeadwood.my.id (all routes under `/v1`)
+- Login: NEP-413 signed message, exchanged for a short-lived bearer session
+- Failed runs are not charged
+
+## Docs
+
+- [Integration guide](https://github.com/hafidabid/secure-lambda402-server-api/blob/main/docs/api/integration-guide.md): login, seller and buyer flows, the 402 quote, payments, run states, errors
+- [Endpoint reference](https://github.com/hafidabid/secure-lambda402-server-api/blob/main/docs/api/endpoint-reference.md): every route with request and response shapes
+- [In-app docs](https://secure-lambda402.vercel.app/docs): the same flow with a 5-minute walkthrough
+
+## Agents
+
+- [MCP server](https://www.npmjs.com/package/@securelambda/mcp-server): `npx @securelambda/mcp-server`; lets Claude Code, Claude Desktop or Codex browse listings and pay for runs under per-run and per-session spend caps
+- [MCP server README](https://github.com/hafidabid/secure-lambda402-server-api/blob/main/packages/mcp-server/README.md): tools, agent wallet, spend caps, client configuration
+- [Connect an agent](https://secure-lambda402.vercel.app/connect-agent): fund an agent wallet from the dashboard
+
+## Optional
+
+- [Source repository](https://github.com/hafidabid/secure-lambda402-server-api)
+- [OutLayer enclave run record](https://github.com/hafidabid/secure-lambda402-server-api/blob/main/docs/pr-evidence/outlayer-enclave-run.md): a paid testnet run evaluated in OutLayer, with execution and settlement transactions
