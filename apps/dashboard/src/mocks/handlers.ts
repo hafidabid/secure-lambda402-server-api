@@ -19,7 +19,7 @@ import {
   type X402Accept,
 } from "@securelambda/schemas";
 import { API_URL } from "@/lib/api";
-import { EVALUATOR, LISTINGS, SELLER_ALLOW_LIST } from "./fixtures";
+import { EVALUATOR, HISTORY, LISTINGS, MORE_LISTINGS, SELLER_ALLOW_LIST } from "./fixtures";
 
 export type Scenario = "happy" | "instant" | "slow" | "fail" | "enclave" | "rejected" | "ratelimited";
 
@@ -31,13 +31,15 @@ export function scenarioFrom(search: string): Scenario {
 }
 
 const base = `${API_URL}/v1`;
-const listings = new Map<string, Listing>(LISTINGS.map((l) => [l.id, l]));
+const listings = new Map<string, Listing>([...LISTINGS, ...MORE_LISTINGS].map((l) => [l.id, l]));
 const challenges = new Map<string, string>();
 const sessions = new Map<string, string>();
 const models = new Map<string, { listingId: string; owner: string }>();
 const quotes = new Map<string, X402Accept>();
 const paidRuns = new Map<string, { runId: string; payment: string }>();
 const runs = new Map<string, { run: Run; startedAt: number; scenario: Scenario }>();
+// Pre-filled history: fixed states that never advance, so every state is on screen from the first page load.
+const history = new Map(HISTORY.map((h) => [h.run.id, h]));
 
 function apiError(code: ErrorCode, message: string = code) {
   const info = ERROR_CODE_INFO[code];
@@ -105,6 +107,8 @@ function timelineFor(scenario: Scenario) {
 }
 
 function current(id: string): { run: Run; receipt: Receipt } | null {
+  const fixed = history.get(id);
+  if (fixed) return fixed;
   const entry = runs.get(id);
   if (!entry) return null;
   const elapsed = entry.scenario === "instant" ? Infinity : Date.now() - entry.startedAt;
@@ -288,10 +292,10 @@ export function handlers(scenario: Scenario) {
       const c = signedIn(request);
       if ("error" in c) return c.error;
       const mine = new Set([...listings.values()].filter((l) => l.seller_id === c.account).map((l) => l.id));
-      const rows = [...runs.keys()]
+      const rows = [...history.keys(), ...runs.keys()]
         .map((id) => current(id)?.run)
         .filter((r): r is Run => !!r && mine.has(r.listing_id))
-        .reverse()
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
         .map((r) => ({ id: r.id, buyer_id: r.buyer_id, state: r.state, created_at: r.created_at }));
       return HttpResponse.json(rows);
     }),

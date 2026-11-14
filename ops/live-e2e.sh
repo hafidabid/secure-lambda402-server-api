@@ -42,7 +42,7 @@ export NEAR_NETWORK=testnet NEAR_RPC_URL="${NEAR_RPC_URL:-https://test.rpc.fastn
 export FACILITATOR_MODE=near RELAYER_ACCOUNT="$RELAYER" RELAYER_KEY="$NEAR_ACCOUNT_PRIVATE_KEY"
 export PAYMENT_TOKEN_CONTRACT="${PAYMENT_TOKEN_CONTRACT:-wrap.testnet}"
 export SEED_RELAYER_ID="$RELAYER" SEED_SELLER_ID="seller.$RELAYER" SEED_BUYER_ID="buyer.$RELAYER"
-export AUTH_MODE=signed SELLER_ALLOW_LIST="$SEED_SELLER_ID" RATE_LIMIT_PER_IP_PER_MINUTE=600
+export AUTH_MODE=signed SELLER_ALLOW_LIST="${SELLER_ALLOW_LIST:-$SEED_SELLER_ID}" RATE_LIMIT_PER_IP_PER_MINUTE=600
 
 # --- the evaluator: a local binary (default) or the real OutLayer TEE ------------------------
 #   EVALUATOR_BACKEND=outlayer ops/live-e2e.sh
@@ -94,4 +94,20 @@ node apps/worker/dist/main.js >.live/worker.log 2>&1 & WORKER_PID=$!
 for _ in $(seq 1 40); do curl -sf "http://localhost:$API_PORT/healthz" >/dev/null 2>&1 && break; sleep 1; done
 curl -sf "http://localhost:$API_PORT/healthz" >/dev/null || { echo "API did not start; see .live/api.log"; tail -20 .live/api.log; exit 1; }
 
-NEAR_ACCOUNT_PRIVATE_KEY="$NEAR_ACCOUNT_PRIVATE_KEY" npx ts-node ops/live-e2e.ts
+# E2E_SCRIPT runs a different script against this same throwaway stack (e.g. ops/seed-demo.ts). Those scripts do not
+# clean up R2 themselves, so remove everything written under this run's unique key prefix when we are done.
+if [ -n "${E2E_SCRIPT:-}" ]; then
+  trap '
+    node -e '"'"'
+      const { S3Client, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
+      const e = process.env, s3 = new S3Client({ endpoint: e.STORAGE_ENDPOINT, region: "auto", forcePathStyle: true, credentials: { accessKeyId: e.STORAGE_ACCESS_KEY, secretAccessKey: e.STORAGE_SECRET_KEY } });
+      (async () => {
+        const prefix = e.STORAGE_KEY_PREFIX.replace(/\/+$/, "") + "/";
+        const l = await s3.send(new ListObjectsV2Command({ Bucket: e.STORAGE_BUCKET, Prefix: prefix }));
+        const keys = (l.Contents || []).map((o) => ({ Key: o.Key }));
+        if (keys.length) await s3.send(new DeleteObjectsCommand({ Bucket: e.STORAGE_BUCKET, Delete: { Objects: keys } }));
+        console.log("cleaned up " + keys.length + " R2 object(s) under " + prefix);
+      })().catch((err) => console.log("R2 cleanup skipped: " + err.message));
+    '"'"'; cleanup' EXIT
+fi
+NEAR_ACCOUNT_PRIVATE_KEY="$NEAR_ACCOUNT_PRIVATE_KEY" npx ts-node "${E2E_SCRIPT:-ops/live-e2e.ts}"
