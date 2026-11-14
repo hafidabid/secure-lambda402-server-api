@@ -1,0 +1,181 @@
+// Data model transcribed from docs/03 (Backend PRD) section B3 verbatim.
+// Column names and constraints are kept 1:1 with the PRD's SQL so the two
+// stay easy to diff against each other as the PRD evolves.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id        String   @id
+  roleHint  String?  @map("role_hint")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  listings Listing[]
+  models   Model[]
+  runs     Run[]
+
+  @@map("accounts")
+}
+
+model EvaluatorVersion {
+  version    String   @id
+  projectId  String   @map("project_id")
+  wasmHash   String   @map("wasm_hash")
+  publicKey  Bytes    @map("public_key")
+  trustTier  Int      @default(1) @map("trust_tier") @db.SmallInt
+  active     Boolean  @default(false)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  listings Listing[]
+  models   Model[]
+
+  @@map("evaluator_versions")
+}
+
+model Listing {
+  id                String    @id
+  sellerId          String    @map("seller_id")
+  name              String
+  schemaJson        Json      @map("schema_json")
+  sampleRows        Json      @map("sample_rows")
+  priceAmount       Decimal   @map("price_amount") @db.Decimal(38, 0)
+  priceAsset        String    @map("price_asset")
+  rulesJson         Json      @map("rules_json")
+  evaluatorVersion  String    @map("evaluator_version")
+  datasetAssetId    String?   @map("dataset_asset_id")
+  datasetWrappedKey Json?     @map("dataset_wrapped_key")
+  status            String
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt       DateTime? @map("published_at") @db.Timestamptz(6)
+
+  seller    Account          @relation(fields: [sellerId], references: [id])
+  evaluator EvaluatorVersion @relation(fields: [evaluatorVersion], references: [version])
+  models    Model[]
+  runs      Run[]
+
+  @@map("listings")
+}
+
+model Asset {
+  id         String   @id
+  ownerId    String   @map("owner_id")
+  kind       String
+  sha256     String
+  sizeBytes  BigInt   @map("size_bytes")
+  storageKey String   @map("storage_key")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  models Model[]
+
+  @@unique([ownerId, sha256])
+  @@map("assets")
+}
+
+model Model {
+  id               String   @id
+  buyerId          String   @map("buyer_id")
+  listingId        String   @map("listing_id")
+  assetId          String   @map("asset_id")
+  wrappedKey       Json     @map("wrapped_key")
+  evaluatorVersion String   @map("evaluator_version")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  buyer     Account          @relation(fields: [buyerId], references: [id])
+  listing   Listing          @relation(fields: [listingId], references: [id])
+  asset     Asset            @relation(fields: [assetId], references: [id])
+  evaluator EvaluatorVersion @relation(fields: [evaluatorVersion], references: [version])
+  runs      Run[]
+
+  @@map("models")
+}
+
+model Run {
+  id           String   @id
+  listingId    String   @map("listing_id")
+  buyerId      String   @map("buyer_id")
+  modelId      String   @map("model_id")
+  state        String
+  paymentNonce String   @unique @map("payment_nonce")
+  attempt      Int      @default(0) @db.SmallInt
+  execTxHash   String?  @map("exec_tx_hash")
+  resultJson   Json?    @map("result_json")
+  errorCode    String?  @map("error_code")
+  mode         String   @default("enclave")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  listing   Listing     @relation(fields: [listingId], references: [id])
+  buyer     Account     @relation(fields: [buyerId], references: [id])
+  model     Model       @relation(fields: [modelId], references: [id])
+  events    RunEvent[]
+  payment   Payment?
+  attestation Attestation?
+
+  @@index([state], map: "runs_state_idx")
+  @@map("runs")
+}
+
+model RunEvent {
+  id        BigInt   @id @default(autoincrement())
+  runId     String   @map("run_id")
+  fromState String?  @map("from_state")
+  toState   String   @map("to_state")
+  detail    Json?
+  at        DateTime @default(now()) @db.Timestamptz(6)
+
+  run Run @relation(fields: [runId], references: [id])
+
+  @@map("run_events")
+}
+
+model Payment {
+  runId           String   @id @map("run_id")
+  nonce           String   @unique
+  payerId         String   @map("payer_id")
+  // Not in docs/03 B3's original SQL: needed to reconstruct a full
+  // SignedPayment for facilitator.settle() without re-deriving it from the
+  // signed payload (this build's "thin payment shim" signs a plain
+  // canonical payload rather than a parseable NEP-366 delegate action).
+  payerPublicKey  String   @map("payer_public_key")
+  payTo           String   @map("pay_to")
+  asset           String
+  amount          Decimal  @db.Decimal(38, 0)
+  validUntil      DateTime @map("valid_until") @db.Timestamptz(6)
+  maxBlockHeight  BigInt   @map("max_block_height")
+  status          String
+  settleTxHash    String?  @map("settle_tx_hash")
+  signedPayload   Bytes    @map("signed_payload")
+
+  run Run @relation(fields: [runId], references: [id])
+
+  @@map("payments")
+}
+
+model Attestation {
+  runId    String  @id @map("run_id")
+  wasmHash String  @map("wasm_hash")
+  quoteRaw Bytes?  @map("quote_raw")
+  verified Boolean @default(false)
+  notes    String?
+
+  run Run @relation(fields: [runId], references: [id])
+
+  @@map("attestations")
+}
+
+model AuditLog {
+  id      BigInt   @id @default(autoincrement())
+  at      DateTime @default(now()) @db.Timestamptz(6)
+  actor   String
+  action  String
+  subject String?
+  detail  Json?
+
+  @@map("audit_log")
+}
