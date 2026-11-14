@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { KeyRound, Loader2, Play } from "lucide-react";
 import { useListing } from "@/lib/queries";
 import { useSession } from "@/lib/session";
+import { useHydrated } from "@/lib/hydrated";
 import { API_URL, evaluate } from "@/lib/api";
 import { errorMessage, formatNear } from "@/lib/format";
 import { isRegisteredOnToken, tokenBalance, waitForTokenBalance } from "@/lib/near";
@@ -87,10 +88,12 @@ export function BuyRunView() {
   const modelId = useSearchParams().get("model") ?? "";
   const router = useRouter();
   const session = useSession();
-  const { data: listing } = useListing(listingId);
+  const hydrated = useHydrated();
+  const { data: listing, error: listingError } = useListing(listingId);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
 
+  if (listingError) return <Page><PageError message={errorMessage(listingError)} /></Page>;
   if (!listing) return <Page><Skeleton className="h-[420px]" /></Page>;
 
   if (!modelId) {
@@ -137,7 +140,7 @@ export function BuyRunView() {
     }
   };
 
-  const account = session.accountId ?? "your-account.testnet";
+  const account = (hydrated && session.accountId) || "your-account.testnet";
 
   return (
     <Page>

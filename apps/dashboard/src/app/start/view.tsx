@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { useSession } from "@/lib/session";
+import { useHydrated } from "@/lib/hydrated";
 import { Btn, Engraved, Led, NearLogo, Panel, Slot } from "@/components/ui";
 
 const SELLER = [
@@ -24,7 +25,9 @@ export function StartView() {
   const role = useSearchParams().get("role") === "seller" ? "seller" : "buyer";
   const session = useSession();
   const { wallet } = session;
-  const signedIn = session.status === "signed-in";
+  const hydrated = useHydrated();
+  const signedIn = hydrated && session.status === "signed-in";
+  const walletStatus = hydrated ? wallet.status : "loading";
   const steps = role === "seller" ? SELLER : BUYER;
 
   return (
@@ -40,13 +43,13 @@ export function StartView() {
               <Led tone={signedIn ? "ok" : "signal"} />
               <span className="flex-1 text-[15px] font-medium">Sign in with a NEAR wallet</span>
               {signedIn && <span className="font-readout text-[13px] text-etch-3">{wallet.accountId}</span>}
-              {!signedIn && wallet.status !== "connected" && (
-                <Btn variant="outline" className="h-9 px-4 text-[14px]" onClick={wallet.connect} disabled={wallet.status !== "disconnected"}>
+              {!signedIn && walletStatus !== "connected" && (
+                <Btn variant="outline" className="h-9 px-4 text-[14px]" onClick={wallet.connect} disabled={walletStatus !== "disconnected"}>
                   <NearLogo />
                   Connect
                 </Btn>
               )}
-              {!signedIn && wallet.status === "connected" && (
+              {!signedIn && walletStatus === "connected" && (
                 <Btn className="h-9 px-4 text-[14px]" onClick={() => void session.signIn()} disabled={session.status === "signing-in"}>
                   Sign in
                 </Btn>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Loader2, LogOut } from "lucide-react";
 import { useSession } from "@/lib/session";
+import { useHydrated } from "@/lib/hydrated";
 import { Btn, Led, NearLogo, SecureLambdaMark, cn } from "./ui";
 
 const NAV = [
@@ -16,8 +17,9 @@ const NAV = [
 function AccountControl() {
   const session = useSession();
   const { wallet } = session;
+  const hydrated = useHydrated();
 
-  if (wallet.status === "loading") return <span className="h-10 w-36 animate-pulse rounded-full bg-chassis" aria-hidden="true" />;
+  if (!hydrated || wallet.status === "loading") return <span className="h-10 w-36 animate-pulse rounded-full bg-chassis" aria-hidden="true" />;
 
   if (wallet.status !== "connected") {
     return (

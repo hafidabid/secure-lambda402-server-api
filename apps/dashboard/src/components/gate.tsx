@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { useSession } from "@/lib/session";
+import { useHydrated } from "@/lib/hydrated";
 import { Btn, Engraved, Led, NearLogo, PageError, Panel, Slot } from "./ui";
 
 function Step({ done, label, children }: { done: boolean; label: string; children?: React.ReactNode }) {
@@ -17,6 +18,8 @@ function Step({ done, label, children }: { done: boolean; label: string; childre
 export function SignInGate({ title, lead, children }: { title: string; lead: string; children: React.ReactNode }) {
   const session = useSession();
   const { wallet } = session;
+  const hydrated = useHydrated();
+  if (!hydrated) return <div className="mx-auto h-[320px] w-full max-w-[560px] px-4 py-14 sm:px-6" aria-hidden="true" />;
   if (session.status === "signed-in") return <>{children}</>;
 
   const connected = wallet.status === "connected";
@@ -55,6 +58,8 @@ export function SignInGate({ title, lead, children }: { title: string; lead: str
 export function SignedInAction({ children, className }: { children: React.ReactNode; className?: string }) {
   const session = useSession();
   const { wallet } = session;
+  const hydrated = useHydrated();
+  if (!hydrated) return <span className={`inline-block animate-pulse rounded-full bg-chassis ${className ?? ""}`} aria-hidden="true" />;
   if (session.status === "signed-in") return <>{children}</>;
   if (wallet.status !== "connected") {
     return (

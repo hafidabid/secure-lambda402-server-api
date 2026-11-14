@@ -9,7 +9,7 @@ import { sealAndUpload, type SealStep } from "@/lib/seal";
 import { useSession } from "@/lib/session";
 import { api } from "@/lib/api";
 import { errorMessage } from "@/lib/format";
-import { CheckRow, CopyIconButton, Crumb, Display, Engraved, Led, Page, PageTitle, Skeleton, Slot, Btn } from "@/components/ui";
+import { CheckRow, CopyIconButton, Crumb, Display, Engraved, Led, Page, PageError, PageTitle, Skeleton, Slot, Btn } from "@/components/ui";
 import { SampleRows } from "@/components/listing";
 import { EncryptProgress, FileDrop, type DropState } from "@/components/seal";
 import { SignedInAction } from "@/components/gate";
@@ -49,7 +49,7 @@ export function BuyModelView() {
   const { listingId } = useParams<{ listingId: string }>();
   const router = useRouter();
   const { token } = useSession();
-  const { data: listing } = useListing(listingId);
+  const { data: listing, error: listingError } = useListing(listingId);
   const { data: evaluator } = useEvaluator();
 
   const [file, setFile] = useState<File | null>(null);
@@ -57,6 +57,7 @@ export function BuyModelView() {
   const [step, setStep] = useState<SealStep | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
 
+  if (listingError) return <Page><PageError message={errorMessage(listingError)} /></Page>;
   if (!listing) return <Page><Skeleton className="h-[420px]" /></Page>;
 
   const featureNames = listing.schema.features.map((f) => f.name);
