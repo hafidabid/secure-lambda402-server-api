@@ -220,13 +220,18 @@ async function main() {
     signer: async (q) => (sentPayment = await realSigner(q)),
     headers: loginFor(BUYER),
     pollIntervalMs: 1500,
-    pollTimeoutMs: 240_000,
+    // A run inside OutLayer's TEE takes about 2 minutes and may be retried once after a transient failure.
+    pollTimeoutMs: process.env.EVALUATOR_MODE === "outlayer" ? 720_000 : 240_000,
   });
   const t0 = Date.now();
   const result = await agent.evaluate(listingId, modelId);
   console.log(`  paid run finished in ${((Date.now() - t0) / 1000).toFixed(1)}s, run ${result.run_id}`);
   check("run returned a result", !!result.result?.metrics, JSON.stringify(result.result.metrics));
-  check("run is honestly labelled local, not attested", result.mode === "local" && result.receipt.attested === false, `mode=${result.mode}`);
+  if (process.env.EVALUATOR_MODE === "outlayer") {
+    check("run executed in the OutLayer enclave and the wasm hash matched", result.mode === "enclave" && result.receipt.attested === true, `mode=${result.mode} wasm_hash=${String(result.receipt.wasm_hash).slice(0, 12)}…`);
+  } else {
+    check("run is honestly labelled local, not attested", result.mode === "local" && result.receipt.attested === false, `mode=${result.mode}`);
+  }
 
   step("6. Verify the result independently");
   const exp = expectedMetrics(rows);

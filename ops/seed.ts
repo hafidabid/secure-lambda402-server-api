@@ -25,6 +25,7 @@ const prisma = new PrismaClient();
 //   SEED_SELLER_ID / SEED_BUYER_ID / SEED_RELAYER_ID   NEAR account ids
 //   EVALUATOR_PUBLIC_KEY_B64   32-byte X25519 public key, base64
 //   EVALUATOR_WASM_HASH        64-hex sha256 of the evaluator build
+//   EVALUATOR_PROJECT_ID       OutLayer project, "owner/name" (what the worker asks OutLayer to run)
 const SELLER_ID = process.env.SEED_SELLER_ID ?? "seller.testnet";
 const BUYER_ID = process.env.SEED_BUYER_ID ?? "buyer.testnet";
 const RELAYER_ID = process.env.SEED_RELAYER_ID ?? "relayer.testnet";
@@ -72,6 +73,7 @@ async function main() {
   // of a reproducible build of crates/evaluator (wasm32-wasip1 target).
   // See ops/runbook.md for the build process.
   const placeholderWasmHash = process.env.EVALUATOR_WASM_HASH ?? "0".repeat(64);
+  const projectId = process.env.EVALUATOR_PROJECT_ID ?? "hafidbuild.testnet/securelambda-evaluator";
 
   // Placeholder public key: 32-byte zero buffer (X25519 public key size).
   // IMPORTANT: In a real deployment, this must be replaced with the actual X25519 public key
@@ -84,12 +86,16 @@ async function main() {
   const evaluator = await prisma.evaluatorVersion.upsert({
     where: { version: "1.0.0" },
     // Re-running only rewrites the evaluator when real values were supplied; defaults never clobber them.
-    update: process.env.EVALUATOR_WASM_HASH || process.env.EVALUATOR_PUBLIC_KEY_B64
-      ? { wasmHash: placeholderWasmHash, publicKey: placeholderPublicKey }
+    update: process.env.EVALUATOR_WASM_HASH || process.env.EVALUATOR_PUBLIC_KEY_B64 || process.env.EVALUATOR_PROJECT_ID
+      ? {
+          ...(process.env.EVALUATOR_WASM_HASH ? { wasmHash: placeholderWasmHash } : {}),
+          ...(process.env.EVALUATOR_PUBLIC_KEY_B64 ? { publicKey: placeholderPublicKey } : {}),
+          ...(process.env.EVALUATOR_PROJECT_ID ? { projectId } : {}),
+        }
       : {},
     create: {
       version: "1.0.0",
-      projectId: "hafidbuild.testnet/securelambda-evaluator",
+      projectId,
       wasmHash: placeholderWasmHash,
       publicKey: placeholderPublicKey,
       trustTier: 1,

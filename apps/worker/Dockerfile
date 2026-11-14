@@ -20,5 +20,6 @@ FROM build AS run
 ENV NODE_ENV=production
 COPY --from=evaluator /build/crates/evaluator/target/release/evaluator /app/evaluator
 USER node
-# The evaluator's hash is read from the binary at start, so the recorded hash always matches what actually runs.
-CMD ["sh", "-c", "EVALUATOR_WASM_HASH=$(sha256sum /app/evaluator | cut -d' ' -f1) exec node apps/worker/dist/main.js"]
+# Local evaluator: its hash is read from the binary at start, so the recorded hash always matches what actually runs.
+# EVALUATOR_MODE=outlayer: the evaluator runs in OutLayer, so there is no local hash to compute.
+CMD ["sh", "-c", "if [ \"$EVALUATOR_MODE\" != outlayer ]; then export EVALUATOR_WASM_HASH=$(sha256sum /app/evaluator | cut -d' ' -f1); fi; exec node apps/worker/dist/main.js"]
