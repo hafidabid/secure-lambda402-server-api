@@ -3,121 +3,171 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Loader2, Lock, Play } from "lucide-react";
+import { KeyRound, Loader2, Play } from "lucide-react";
 import { useListing } from "@/lib/queries";
-import { useWallet } from "@/lib/wallet";
-import { API_URL, ApiRequestError, evaluate } from "@/lib/api";
-import { formatNear, userMessage } from "@/lib/format";
-import { Badge, Btn, CopyIconButton, Crumb, PageError } from "@/components/ui";
+import { useSession } from "@/lib/session";
+import { API_URL, evaluate } from "@/lib/api";
+import { errorMessage, formatNear } from "@/lib/format";
+import { Btn, CopyIconButton, Crumb, Display, Engraved, Led, Page, PageError, PageTitle, Panel, Skeleton, Slot } from "@/components/ui";
+import { SignedInAction } from "@/components/gate";
 
 function agentSnippet(listingId: string, modelId: string, account: string) {
-  return `import { BuyerAgentClient } from "@securelambda/agent-sdk";
+  return `import { BuyerAgentClient, createNearLogin, createNearPaymentSigner } from "@securelambda/agent-sdk";
+
+const baseUrl = "${API_URL}";
+const accountId = "${account}";
+const privateKey = process.env.NEAR_PRIVATE_KEY!;
 
 const agent = new BuyerAgentClient({
-  baseUrl: "${API_URL}",
-  signer: nearSigner("${account}"),
+  baseUrl,
+  headers: createNearLogin({ baseUrl, accountId, privateKey }),
+  signer: createNearPaymentSigner({ accountId, privateKey, autoWrapNear: true }),
 });
 
-const { result, receipt } = await agent.evaluate(
-  "${listingId}",
-  "${modelId}",
-);
-// result.metrics → { accuracy, auc, f1 }`;
+const { result, receipt } = await agent.evaluate("${listingId}", "${modelId}");
+// result.metrics: { accuracy, auc, f1 }`;
 }
 
-type Phase = "idle" | "authorising" | "starting";
+type Phase = "idle" | "quoting" | "signing" | "starting";
+
+const PHASE_LABEL: Record<Exclude<Phase, "idle">, string> = {
+  quoting: "Getting the price…",
+  signing: "Signing the payment…",
+  starting: "Starting the run…",
+};
+
+function PaymentKeyRow() {
+  const session = useSession();
+  const [error, setError] = useState<string | null>(null);
+  const act = async (fn: () => Promise<void>) => {
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  };
+
+  return (
+    <Slot className="flex flex-col gap-3 px-4 py-3.5">
+      <div className="flex flex-wrap items-center gap-3">
+        <Led tone={session.paymentKey === "ready" ? "ok" : "off"} />
+        <span className="flex-1 text-[14px] font-medium">
+          {session.paymentKey === "ready" ? "Browser payments on" : "Browser payments off"}
+        </span>
+        {session.paymentKey === "none" && (
+          <Btn variant="outline" className="h-9 px-4 text-[14px]" onClick={() => void act(session.enablePayments)}>
+            <KeyRound />
+            Turn on
+          </Btn>
+        )}
+        {session.paymentKey === "ready" && (
+          <Btn variant="ghost" className="h-9 px-3 text-[13px]" onClick={() => void act(session.removePaymentKey)}>
+            Turn off
+          </Btn>
+        )}
+        {(session.paymentKey === "adding" || session.paymentKey === "removing") && (
+          <span className="flex items-center gap-2 text-[13px] text-etch-3"><Loader2 className="size-4 animate-spin" />Waiting for your wallet</span>
+        )}
+      </div>
+      <p className="text-[13px] leading-relaxed text-etch-3">
+        Your wallet approves one transaction that lets this tab sign run payments for you. That permission lives only in this
+        tab and is forgotten when you close it. Turn it off to revoke it on your account.
+      </p>
+      {error && <span className="text-[13px] text-etch-2">{error}</span>}
+    </Slot>
+  );
+}
 
 export function BuyRunView() {
   const { listingId } = useParams<{ listingId: string }>();
   const modelId = useSearchParams().get("model") ?? "";
   const router = useRouter();
-  const wallet = useWallet();
+  const session = useSession();
   const { data: listing } = useListing(listingId);
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
 
-  if (!listing) return <div className="mx-auto h-[400px] max-w-[1100px] animate-pulse px-6 py-8" aria-label="Loading" />;
+  if (!listing) return <Page><Skeleton className="h-[420px]" /></Page>;
 
   if (!modelId) {
     return (
-      <div className="mx-auto flex max-w-[1100px] flex-col gap-4 px-6 py-8">
-        <PageError message="Add your model first." />
-        <Link href={`/buy/${listing.id}/model`} className="text-sm text-seal">Add your model</Link>
-      </div>
+      <Page>
+        <PageError message="Add your model first." action={<Link href={`/buy/${listing.id}/model`} className="text-[14px] font-semibold underline">Add your model</Link>} />
+      </Page>
     );
   }
 
   const runOnce = async () => {
-    if (!wallet.accountId) return;
+    if (!session.token) return;
     setError(null);
-    setPhase("authorising");
+    setPhase("quoting");
     try {
-      const first = await evaluate(listing.id, modelId, wallet.accountId);
+      const first = await evaluate(listing.id, modelId, session.token);
       if (first.kind !== "quote") {
         router.push(`/runs/${first.runId}`);
         return;
       }
       const accept = first.quote.accepts[0];
-      if (!accept) throw new ApiRequestError("PAYMENT_INVALID", 402);
-      const payment = await wallet.signPayment(accept);
+      if (!accept) throw new Error("The server sent no price quote.");
+      setPhase("signing");
+      const payment = await session.signPayment(accept);
       setPhase("starting");
-      const paid = await evaluate(listing.id, modelId, wallet.accountId, payment);
-      if (paid.kind === "quote") throw new ApiRequestError("PAYMENT_INVALID", 402);
+      const paid = await evaluate(listing.id, modelId, session.token, payment);
+      if (paid.kind === "quote") throw new Error("The payment was not accepted. You were not charged.");
       router.push(`/runs/${paid.runId}`);
     } catch (e) {
       setPhase("idle");
-      setError(userMessage(e instanceof ApiRequestError ? e.code : "NETWORK"));
+      setError(errorMessage(e));
     }
   };
 
-  const account = wallet.accountId ?? "your-account.testnet";
+  const account = session.accountId ?? "your-account.testnet";
 
   return (
-    <div className="mx-auto flex max-w-[1100px] flex-col gap-5 px-6 py-7">
+    <Page>
       <Crumb href={`/listings/${listing.id}`}>{listing.name}</Crumb>
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-[26px] font-semibold tracking-tight">Run it</h1>
-        <Badge className="bg-ink text-glow"><Lock className="size-3" strokeWidth={2.5} />model {modelId} uploaded</Badge>
-      </div>
+      <PageTitle
+        aside={
+          <span className="inline-flex h-8 items-center gap-2 rounded-full bg-slot px-3 text-[13px] shadow-[inset_0_1px_3px_rgba(40,36,28,0.16)]">
+            <Led tone="ok" />
+            Model {modelId} locked to the evaluator
+          </span>
+        }
+      >
+        Run it
+      </PageTitle>
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] items-start gap-5">
-        <section className="flex flex-col gap-[18px] rounded-2xl border border-line bg-surface p-[22px]">
-          <span className="text-[15px] font-semibold">Run once from this browser</span>
-          <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[40px] font-semibold tracking-tight">{formatNear(listing.price_amount)}</span>
-            <span className="font-mono text-[15px] text-muted">{listing.price_asset.toUpperCase()}</span>
-          </div>
-          <div className="flex justify-between border-y border-surface-2 py-2.5 text-[13px]">
-            <span className="text-muted">Network</span>
-            <span className="font-mono">near:testnet</span>
-          </div>
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
+        <Panel className="flex flex-col gap-4">
+          <Engraved>Run once from this browser</Engraved>
+          <Display className="flex items-baseline justify-between gap-3 px-5 py-4">
+            <span className="font-readout text-[40px] font-semibold leading-none">{formatNear(listing.price_amount)}</span>
+            <span className="font-readout text-[14px] text-display-dim">wNEAR · near:testnet</span>
+          </Display>
 
-          {error && <PageError message={error} />}
-
-          {wallet.status !== "connected" ? (
-            <Btn onClick={() => wallet.connect()} className="h-12 text-[15px]">Connect wallet</Btn>
-          ) : (
-            <Btn variant="seal" onClick={runOnce} disabled={phase !== "idle"} className="h-12 text-[15px]">
+          <SignedInAction className="h-12 w-full">
+            <PaymentKeyRow />
+            {error && <PageError message={error} />}
+            <Btn onClick={runOnce} disabled={phase !== "idle" || session.paymentKey !== "ready"} className="h-12 w-full">
               {phase === "idle" ? <Play /> : <Loader2 className="animate-spin" />}
-              {phase === "idle" && "Run once"}
-              {phase === "authorising" && "Authorising…"}
-              {phase === "starting" && "Starting run…"}
+              {phase === "idle" ? "Run once" : PHASE_LABEL[phase]}
             </Btn>
-          )}
-          <span className="text-center text-[13px] text-muted">Payment is taken only after a successful run.</span>
-        </section>
+          </SignedInAction>
+          <span className="text-center text-[13px] text-etch-3">You pay only when a score is delivered. Failed runs are free.</span>
+        </Panel>
 
         <section className="flex min-w-0 flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[15px] font-semibold">Or let your agent pay</span>
+          <div className="flex items-center justify-between px-1">
+            <Engraved>Or let your agent pay</Engraved>
             <CopyIconButton content={agentSnippet(listing.id, modelId, account)} label="Copy agent snippet" />
           </div>
-          <pre className="m-0 overflow-x-auto rounded-xl bg-code px-5 py-[18px] font-mono text-[12.5px] leading-[1.75] text-code-text">
-            {agentSnippet(listing.id, modelId, account)}
-          </pre>
-          <span className="font-mono text-xs text-muted">402 → sign → retry → poll, handled for you</span>
+          <Display className="overflow-x-auto px-5 py-4">
+            <pre className="m-0 font-readout text-[12.5px] leading-[1.75]">{agentSnippet(listing.id, modelId, account)}</pre>
+          </Display>
+          <span className="px-1 text-[13px] text-etch-3">The SDK handles the price quote, signing, retry and polling.</span>
         </section>
       </div>
-    </div>
+    </Page>
   );
 }

@@ -2,45 +2,33 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { MAX_UPLOAD_BYTES_TONIGHT, type Listing, type ListingRules, type SchemaContract } from "@securelambda/schemas";
-import { api, ApiRequestError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useEvaluator } from "@/lib/queries";
-import { useWallet } from "@/lib/wallet";
+import { useSession } from "@/lib/session";
 import { classCounts, inferSchema, parseCsv, synthRows, validateCsv, type ParsedCsv, type SampleRow } from "@/lib/csv";
-import { nearToYocto, userMessage } from "@/lib/format";
+import { errorMessage, nearToYocto } from "@/lib/format";
 import { sealAndUpload, type SealStep } from "@/lib/seal";
-import { Btn, CheckRow, LinkBtn, PageError, cn } from "@/components/ui";
+import { Btn, CheckRow, Engraved, Led, LinkBtn, PageError, Panel, Slot, cn, type LedTone } from "@/components/ui";
 import { SampleRows, SchemaTable } from "@/components/listing";
 import { EncryptProgress, FileDrop } from "@/components/seal";
+import { SignInGate } from "@/components/gate";
 
 const STEPS = ["Describe", "Samples", "Price", "Upload", "Publish"];
 
+function stepLed(i: number, at: number): LedTone {
+  if (i < at) return "ok";
+  return i === at ? "signal" : "off";
+}
+
 function Stepper({ at }: { at: number }) {
   return (
-    <ol className="flex flex-wrap items-center gap-2">
+    <ol className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="Steps">
       {STEPS.map((label, i) => (
-        <li key={label} className="flex items-center gap-2">
-          {i > 0 && <span className={cn("h-px w-5", i <= at ? "bg-ink" : "bg-line-strong")} />}
-          <span
-            aria-current={i === at ? "step" : undefined}
-            className={cn(
-              "flex items-center gap-2 text-[13px]",
-              i === at ? "rounded-full border border-line bg-surface py-[3px] pl-[3px] pr-3 font-semibold" : "text-ink-2",
-            )}
-          >
-            <span
-              className={cn(
-                "flex size-6 items-center justify-center rounded-full font-mono text-[11px] font-semibold",
-                i < at && "bg-ink text-white",
-                i === at && "bg-seal text-white",
-                i > at && "border border-line-strong text-muted",
-              )}
-            >
-              {i < at ? <Check className="size-3" strokeWidth={3} /> : i + 1}
-            </span>
-            {label}
-          </span>
+        <li key={label} aria-current={i === at ? "step" : undefined} className="flex items-center gap-2">
+          <Led tone={stepLed(i, at)} />
+          <span className={cn("font-engraved text-[13px] font-semibold uppercase tracking-[0.12em]", i === at ? "text-etch" : "text-etch-3")}>{label}</span>
         </li>
       ))}
     </ol>
@@ -49,19 +37,24 @@ function Stepper({ at }: { at: number }) {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="flex flex-col gap-1.5 text-[13px] font-medium">
-      {label}
+    <label className="flex flex-col gap-1.5">
+      <Engraved>{label}</Engraved>
       {children}
     </label>
   );
 }
 
-const input = "h-10 rounded-md border border-line-strong bg-surface px-3 font-mono text-[13px] outline-none focus:border-seal";
+const input =
+  "h-11 rounded-[14px] bg-slot px-3.5 font-readout text-[14px] shadow-[inset_0_2px_4px_rgba(40,36,28,0.14)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal";
 
 const DEFAULT_RULES: ListingRules = { min_rows: 500, min_class_count: 50, round: 2, metrics: ["accuracy", "auc", "f1"], runs_per_day: 10, lifetime_budget: 200 };
 
-export default function SellWizard() {
-  const wallet = useWallet();
+function StepTitle({ children }: { children: React.ReactNode }) {
+  return <h1 className="text-balance text-[clamp(1.75rem,3.4vw,2.25rem)] font-bold leading-[1.05] tracking-[-0.02em]">{children}</h1>;
+}
+
+function SellWizard() {
+  const { token } = useSession();
   const { data: evaluator } = useEvaluator();
 
   const [step, setStep] = useState(0);
@@ -89,75 +82,70 @@ export default function SellWizard() {
     setSealStep(null);
   };
 
-  const fail = (e: unknown) => setError(userMessage(e instanceof ApiRequestError ? e.code : "NETWORK"));
-
   const createDraft = async () => {
-    if (!schema || !wallet.accountId || !evaluator) return;
+    if (!schema || !token || !evaluator) return;
     setBusy(true);
     setError(null);
     try {
       const dto = { name, schema, sample_rows: samples, price_amount: nearToYocto(price), price_asset: "near", rules, evaluator_version: evaluator.version };
-      const draft = listing ? await api.patchListing(listing.id, dto, wallet.accountId) : await api.createListing(dto, wallet.accountId);
+      const draft = listing ? await api.patchListing(listing.id, dto, token) : await api.createListing(dto, token);
       setListing(draft);
       setStep(3);
     } catch (e) {
-      fail(e);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
   };
 
   const upload = async () => {
-    if (!file || !listing || !evaluator || !wallet.accountId) return;
+    if (!file || !listing || !evaluator || !token) return;
     setError(null);
     try {
-      await sealAndUpload(file, listing.id, "dataset", evaluator, wallet.accountId, setSealStep);
-    } catch {
-      setError("Upload failed. Nothing was saved. Retry.");
+      await sealAndUpload(
+        file,
+        listing.id,
+        "dataset",
+        evaluator,
+        async (ciphertext, envelope) => (await api.uploadDataset(listing.id, ciphertext, envelope, token)).asset_id,
+        setSealStep,
+      );
+    } catch (e) {
+      setError(errorMessage(e));
     }
   };
 
   const publish = async () => {
-    if (!listing || !wallet.accountId) return;
+    if (!listing || !token) return;
     setBusy(true);
     setError(null);
     try {
-      setListing(await api.publishListing(listing.id, wallet.accountId));
+      setListing(await api.publishListing(listing.id, token));
     } catch (e) {
-      fail(e);
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
   };
 
-  if (wallet.status !== "connected") {
-    return (
-      <div className="mx-auto flex max-w-[720px] flex-col items-start gap-4 px-6 py-16">
-        <h1 className="text-[26px] font-semibold tracking-tight">Connect your wallet to sell</h1>
-        <p className="text-sm text-ink-2">Your NEAR account receives payment for every run.</p>
-        <Btn onClick={() => wallet.connect("hospital.testnet")}>Connect wallet</Btn>
-      </div>
-    );
-  }
-
   const counts = csv && label ? classCounts(csv, label) : null;
 
   return (
-    <div className="mx-auto flex max-w-[760px] flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex w-full max-w-[800px] flex-col gap-6 px-4 py-8 sm:px-6 lg:py-10">
       <Stepper at={step} />
 
       {step === 0 && (
         <>
-          <h1 className="text-[26px] font-semibold tracking-tight">Describe your dataset</h1>
+          <StepTitle>Describe your dataset</StepTitle>
           <Field label="Name">
-            <input className={cn(input, "font-sans text-sm")} value={name} onChange={(e) => setName(e.target.value)} placeholder="Diabetes risk, Hospital A" />
+            <input className={cn(input, "font-panel text-[15px]")} value={name} onChange={(e) => setName(e.target.value)} placeholder="Diabetes risk, Hospital A" />
           </Field>
           <FileDrop
             accept=".csv,text/csv"
             file={file}
             state={csv ? "valid" : "idle"}
-            meta={csv ? `${csv.rows.length} rows · ${csv.header.length} columns · read on this device` : "numeric features plus one 0/1 label column"}
-            placeholder="Drop your CSV"
+            meta={csv ? `${csv.rows.length} rows · ${csv.header.length} columns · read on this device only` : "Number columns plus one 0/1 label column"}
+            placeholder="Drop your CSV or choose a file"
             onFile={onFile}
           />
           {csv && (
@@ -176,10 +164,10 @@ export default function SellWizard() {
 
       {step === 1 && schema && csv && (
         <>
-          <h1 className="text-[26px] font-semibold tracking-tight">Check the sample rows</h1>
-          <p className="text-sm text-ink-2">Buyers test against these. They are generated, not taken from your file.</p>
+          <StepTitle>Check the sample rows</StepTitle>
+          <p className="-mt-2 text-[15px] text-etch-2">Buyers see these to shape their model. They are made up, not copied from your file.</p>
           <SampleRows schema={schema} rows={samples} />
-          <div className="flex justify-between">
+          <div className="flex flex-wrap justify-between gap-2">
             <Btn variant="ghost" onClick={() => setStep(0)}>Back</Btn>
             <div className="flex gap-2">
               <Btn variant="outline" onClick={() => setSamples(synthRows(csv, schema))}><RefreshCw />Regenerate</Btn>
@@ -191,26 +179,26 @@ export default function SellWizard() {
 
       {step === 2 && (
         <>
-          <h1 className="text-[26px] font-semibold tracking-tight">Price and limits</h1>
-          <div className="grid grid-cols-2 gap-4">
+          <StepTitle>Price and limits</StepTitle>
+          <Panel className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Price per run (NEAR)"><input className={input} value={price} onChange={(e) => setPrice(e.target.value)} inputMode="decimal" /></Field>
-            <Field label="Round metrics to (decimals)"><input className={input} type="number" min={0} max={6} value={rules.round} onChange={(e) => setRules({ ...rules, round: Number(e.target.value) })} /></Field>
-            <Field label="Min rows"><input className={input} type="number" value={rules.min_rows} onChange={(e) => setRules({ ...rules, min_rows: Number(e.target.value) })} /></Field>
-            <Field label="Min rows per class"><input className={input} type="number" value={rules.min_class_count} onChange={(e) => setRules({ ...rules, min_class_count: Number(e.target.value) })} /></Field>
+            <Field label="Round scores to (decimals)"><input className={input} type="number" min={0} max={6} value={rules.round} onChange={(e) => setRules({ ...rules, round: Number(e.target.value) })} /></Field>
+            <Field label="Minimum rows"><input className={input} type="number" value={rules.min_rows} onChange={(e) => setRules({ ...rules, min_rows: Number(e.target.value) })} /></Field>
+            <Field label="Minimum rows per class"><input className={input} type="number" value={rules.min_class_count} onChange={(e) => setRules({ ...rules, min_class_count: Number(e.target.value) })} /></Field>
             <Field label="Runs per buyer per day"><input className={input} type="number" value={rules.runs_per_day} onChange={(e) => setRules({ ...rules, runs_per_day: Number(e.target.value) })} /></Field>
-            <Field label="Lifetime run budget"><input className={input} type="number" value={rules.lifetime_budget} onChange={(e) => setRules({ ...rules, lifetime_budget: Number(e.target.value) })} /></Field>
-          </div>
+            <Field label="Total runs per buyer"><input className={input} type="number" value={rules.lifetime_budget} onChange={(e) => setRules({ ...rules, lifetime_budget: Number(e.target.value) })} /></Field>
+          </Panel>
           {error && <PageError message={error} />}
           <div className="flex justify-between">
             <Btn variant="ghost" onClick={() => setStep(1)}>Back</Btn>
-            <Btn disabled={busy || !(Number(price) > 0) || !evaluator} onClick={createDraft}>{busy ? "Saving…" : "Next"}</Btn>
+            <Btn disabled={busy || !(Number(price) > 0) || !evaluator} onClick={createDraft}>{busy ? "Saving…" : "Save draft"}</Btn>
           </div>
         </>
       )}
 
       {step === 3 && file && csv && schema && evaluator && (
         <>
-          <h1 className="text-[26px] font-semibold tracking-tight">Encrypt and upload</h1>
+          <StepTitle>Encrypt and upload</StepTitle>
           <FileDrop
             accept=".csv,text/csv"
             file={file}
@@ -219,18 +207,19 @@ export default function SellWizard() {
             placeholder=""
             onFile={onFile}
           />
-          <div className="rounded-[14px] border border-line bg-surface px-[18px] py-1">
-            <CheckRow ok={!tooLarge} label="Size" detail={tooLarge ? "File is larger than the 1 MB limit." : "under 1 MB"} />
+          <Slot>
+            <CheckRow ok={!tooLarge} label="Size" detail={tooLarge ? "Larger than the 1 MB limit" : "Under 1 MB"} />
             <CheckRow ok={!csvErrors.some((e) => e.kind === "header")} label="Header matches schema" detail={[...schema.features.map((f) => f.name), schema.label].join(", ")} />
             <CheckRow ok={!csvErrors.some((e) => e.kind === "types")} label="Types and labels" />
             <CheckRow ok={!csvErrors.some((e) => e.kind === "rows")} label="Enough rows" detail={counts ? `${csv.rows.length} · class 0: ${counts.zeros} · class 1: ${counts.ones}` : undefined} />
-          </div>
+          </Slot>
           {csvErrors.length > 0 && (
-            <div role="alert" className="flex flex-col gap-1 rounded-xl border border-[#F5C2BC] bg-danger-soft px-4 py-3">
-              {csvErrors.map((e) => <span key={e.message} className="font-mono text-xs text-danger-ink">{e.message}</span>)}
-            </div>
+            <Slot role="alert" className="flex flex-col gap-1.5 px-4 py-3">
+              {csvErrors.map((e) => <span key={e.message} className="flex items-center gap-3 text-[14px]"><Led tone="signal" />{e.message}</span>)}
+            </Slot>
           )}
           {sealStep && <EncryptProgress step={sealStep} failed={error} wasmHash={evaluator.wasm_hash} onRetry={upload} />}
+          {!sealStep && error && <PageError message={error} />}
           <div className="flex justify-between">
             <Btn variant="ghost" onClick={() => setStep(2)} disabled={sealStep !== null && sealStep !== "done"}>Back</Btn>
             {sealStep === "done" ? (
@@ -244,26 +233,34 @@ export default function SellWizard() {
 
       {step === 4 && listing && (
         <>
-          <h1 className="text-[26px] font-semibold tracking-tight">{listing.status === "published" ? "Published" : "Publish"}</h1>
-          <div className="rounded-[14px] border border-line bg-surface px-[18px] py-1">
-            <CheckRow ok label="Dataset locked to evaluator" detail={evaluator?.version} />
+          <StepTitle>{listing.status === "published" ? "Published" : "Publish"}</StepTitle>
+          <Slot>
+            <CheckRow ok label="Dataset locked to the evaluator" detail={evaluator?.version} />
             <CheckRow ok label="Price" detail={`${price} NEAR per run`} />
-            <CheckRow ok label="Limits" detail={`${rules.runs_per_day} / buyer / day · ${rules.lifetime_budget} total`} />
-          </div>
+            <CheckRow ok label="Limits" detail={`${rules.runs_per_day} per buyer per day · ${rules.lifetime_budget} total`} />
+          </Slot>
           {error && <PageError message={error} />}
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             {listing.status === "published" ? (
               <>
                 <LinkBtn variant="outline" href="/sell/runs">See runs</LinkBtn>
                 <LinkBtn href={`/listings/${listing.id}`}>Open listing</LinkBtn>
               </>
             ) : (
-              <Btn variant="seal" disabled={busy} onClick={publish}>{busy ? "Publishing…" : "Publish"}</Btn>
+              <Btn disabled={busy} onClick={publish}>{busy ? "Publishing…" : "Publish"}</Btn>
             )}
           </div>
-          {listing.status === "published" && <Link href="/listings" className="text-sm text-seal">Back to catalog</Link>}
+          {listing.status === "published" && <Link href="/listings" className="text-[14px] font-semibold underline">Back to datasets</Link>}
         </>
       )}
     </div>
+  );
+}
+
+export default function SellPage() {
+  return (
+    <SignInGate title="Sign in to sell runs on your data" lead="Your NEAR account receives the payment for every successful run. Selling needs an account the operator has enabled.">
+      <SellWizard />
+    </SignInGate>
   );
 }
