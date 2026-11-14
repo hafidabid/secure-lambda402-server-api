@@ -39,6 +39,15 @@ Signed in as `medai.testnet`.
 - **Slow run.** The run is still executing. A slow run is a status, not a failure.
   ![Slow](buyer/10-slow-run-in-progress.png)
 
+### Connect an agent
+
+`/connect-agent` funds a wallet the agent generated for itself, so the MCP server can pay for runs without a private key in its config. The budget sent is all the agent can spend.
+
+- **Send the budget.** The agent's account and its 0.1 NEAR budget.
+  ![Send budget](buyer/WhatsApp%20Image%202026-11-15%20at%2002.35.13.jpeg)
+- **Connected.** The agent can now pay for runs from that budget.
+  ![Connected](buyer/WhatsApp%20Image%202026-11-15%20at%2002.36.37.jpeg)
+
 ## Seller: list a dataset and get paid per run
 
 Signed in as `hospital.testnet`. Selling needs an account the operator has enabled. If the operator's allow-list is empty, any signed-in account can sell.

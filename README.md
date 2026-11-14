@@ -26,7 +26,13 @@ The intended privacy boundary is simple: the platform stores encrypted assets; t
 
 ## What the screenshots prove
 
-The public dashboard is connected to the live testnet API; its [5-minute guide](https://secure-lambda402.vercel.app/docs#test-it-in-5-minutes) walks through a run with a sample model. The repository screenshots below are captured outputs from the end-to-end test workflow, showing the backend and payment path.
+The public dashboard is connected to the live testnet API; its [5-minute guide](https://secure-lambda402.vercel.app/docs#test-it-in-5-minutes) walks through a run with a sample model.
+
+**The dashboard, screen by screen.** The [screenshot walkthrough](screenshots/README.md) covers both sides of the marketplace: a buyer checking a model on their device, paying and getting an attested receipt, and a seller encrypting and publishing a dataset. Those captures use the dashboard's mock mode, so their names and scores are demo fixtures.
+
+![Dashboard: a buyer's result and receipt](screenshots/buyer/08-result-attested-receipt.png)
+
+The two screenshots below are captured outputs from the end-to-end test workflow, showing the backend and payment path.
 
 **1. Seller publishes a listing; the stored object is ciphertext.**
 
@@ -164,6 +170,7 @@ Built during the NEAR Hackathon; the first commit is 2026-11-14 and there is no 
 ## Start here
 
 - [Open the dashboard](https://secure-lambda402.vercel.app/)
+- [Walk through the dashboard screens](screenshots/README.md)
 - [Follow the API integration guide](docs/api/integration-guide.md)
 - [Browse the endpoint reference](docs/api/endpoint-reference.md)
 - [Read the deployment and OutLayer runbook](ops/runbook.md)
