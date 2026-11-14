@@ -86,7 +86,7 @@ No “100% private” claim: the operator-set key and attestation-verification l
 
 ## Business model and roadmap
 
-**Who pays.** The model builder pays per run. The seller sets the price on the listing, in wNEAR; the full amount settles to the seller only after a successful run, and failed runs cost nothing. SecureLambda takes no fee today.
+**Who pays.** The model builder pays per run. The seller sets the price on the listing, in wNEAR; the full amount settles to the seller only after a successful run, and failed runs cost nothing. SecureLambda plans to take a 1% platform fee on each settled run; it is not charged yet.
 
 **Roadmap**, in the order that closes the trust gaps above:
 
