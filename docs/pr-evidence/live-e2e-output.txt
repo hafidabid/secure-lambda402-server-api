@@ -1,0 +1,54 @@
+== building the Rust evaluator (release)
+== building packages, migrating and seeding
+== starting API (:3917) and worker
+SecureLambda live E2E  api=http://localhost:3917  seller=seller.irjenpro.testnet  buyer=buyer.irjenpro.testnet
+
+== 0. Onboarding: the seller registers on the token contract (NEP-145, one time)
+  ✓ seller.irjenpro.testnet can receive wrap.testnet
+
+== 1. Service is up and exposes the evaluator
+  ✓ GET /v1/evaluator returns version + public key  (v1.0.0)
+
+== 2. Seller creates, seals and publishes a listing
+  ✓ listing created as draft  (HTTP 201 )
+  ✓ sealed dataset uploaded  (HTTP 201 )
+  ✓ listing published  (HTTP 200)
+
+== 3. Ciphertext really is ciphertext in Cloudflare R2
+  ✓ objects were written under the configured prefix  (1 object(s) under "secure-lambda-api-service/live-e2e/1794652005/")
+  ✓ stored bytes equal the sealed blob
+  ✓ stored bytes do not contain the plaintext CSV header
+
+== 4. Buyer uploads a sealed model
+  ✓ sealed model uploaded  (HTTP 201 )
+
+== 5. Pay-per-run with a real NEAR payment
+  ✓ unpaid request gets an x402 quote (HTTP 402)  (near:testnet, 0.01 NEAR)
+  ✓ forged payment (stranger's key) is refused  (HTTP 402)
+  ✓ buyer starts with zero wNEAR (only native NEAR)
+Receipt: AMJTfzZyRF9onYZQqS6dTVRbSbm8LkGFds1eZZ2ecMMC
+	Log [wrap.testnet]: Deposit 10000000000000000000000 NEAR to buyer.irjenpro.testnet
+  paid run finished in 9.7s, run run_3cab7c1e-de2a-4dc9-8e15-2956d15d908b
+  ✓ run returned a result  ({"accuracy":0.89,"auc":0.96,"f1":0.92})
+  ✓ run is honestly labelled local, not attested  (mode=local)
+
+== 6. Verify the result independently
+  ✓ accuracy matches an independent TypeScript computation  (evaluator 0.89 vs local 0.8917)
+  ✓ auc matches an independent TypeScript computation  (evaluator 0.96 vs local 0.9570)
+  ✓ f1 matches an independent TypeScript computation  (evaluator 0.92 vs local 0.9207)
+  ✓ row count is only revealed as a bucket  (200-499)
+
+== 7. The payment really moved on NEAR testnet
+  ✓ receipt carries a settle transaction hash  (GSY7HzuCJkAuRaCZWRSVCB57qLAZcaXGBnhFMXiTKAvq)
+  explorer: https://explorer.testnet.near.org/transactions/GSY7HzuCJkAuRaCZWRSVCB57qLAZcaXGBnhFMXiTKAvq
+  ✓ seller received exactly the price in wNEAR  (0.03 NEAR -> 0.04 NEAR)
+  ✓ the buyer's wNEAR paid for it (nothing left over)  (wNEAR 0 NEAR -> auto-wrapped -> 0 NEAR)
+  ✓ the buyer's own NEAR funded it, via the automatic wrap  (native 4.9674 NEAR -> 4.9572 NEAR)
+  ✓ the relayer did NOT fund the payment (gas only)  (relayer spent 0.0002 NEAR of NEAR on gas)
+
+== 8. Replaying the same payment does not charge twice
+  ✓ replay returns the same run  (HTTP 200)
+  ✓ seller balance did not change on replay
+  cleaned up 2 R2 object(s) under "secure-lambda-api-service/live-e2e/1794652005/"
+
+ALL 25 CHECKS PASSED

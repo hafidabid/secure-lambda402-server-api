@@ -10,6 +10,7 @@ This runbook covers the operational steps needed to build, verify, and deploy th
 4. [Update the EvaluatorVersion](#update-the-evaluatorversion)
 5. [Configure OutLayer Deployment](#configure-outlayer-deployment)
 6. [Pre-Deployment Verification](#pre-deployment-verification)
+7. [Live testnet run](#live-testnet-run)
 
 ---
 
@@ -217,6 +218,42 @@ Failed:  0
 Warned:  0
 
 ✓ Preflight OK — deployment ready
+```
+
+---
+
+## Live testnet run
+
+`ops/live-e2e.sh` runs the whole product against real services and checks the results independently. It needs Docker and Rust, and a credentials file named `secret` in the repo root (gitignored; never commit it):
+
+```bash
+NEAR_ACCOUNT_PRIVATE_KEY="ed25519:..."        # full-access key of the relayer account, e.g. irjenpro.testnet
+S3_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com
+S3_BUCKET=...  S3_ACCESS_KEY_ID=...  S3_SECRET_ACCESS_KEY=...  S3_REGION=auto
+S3_KEY_PREFIX="my-folder"                      # optional
+```
+
+```bash
+ops/live-e2e.sh                  # ~1 minute; cleans up its R2 objects
+KEEP_OBJECTS=1 ops/live-e2e.sh   # keep the uploaded objects
+```
+
+What it does: starts throwaway Postgres and Redis on ports 55432/56379 (it never touches yours), builds the evaluator, creates a fresh evaluator keypair, seeds, starts the API (port 3917) and worker, then runs `ops/live-e2e.ts`.
+
+**Accounts.** The relayer is the key's own account. The buyer and seller are sub-accounts (`buyer.<relayer>`, `seller.<relayer>`) sharing that key. Create them once:
+`near account create-account fund-myself buyer.<relayer> ...`, or with `near-api-js` `account.createAccount`. The buyer needs a few NEAR; it wraps a little into wNEAR per run.
+
+**Money.** A run costs 0.01 wNEAR. Buyers pay in wNEAR (`wrap.testnet`), not native NEAR: a native transfer inside a delegate action is charged to the relayer. The relayer only pays gas (about 0.0002 NEAR per settle). Keep the relayer above 0.05 NEAR or settlement pauses with "relayer has no gas".
+
+**RPC.** `https://rpc.testnet.near.org` is deprecated and rejects some requests. The default is `https://test.rpc.fastnear.com`; override with `NEAR_RPC_URL`.
+
+**Rust cache.** If `~/.cargo` is root-owned the script uses `.live/cargo-home` automatically.
+
+**Tests that spend testnet funds** skip unless credentials are in the environment:
+
+```bash
+set -a; . ./secret; set +a
+(cd packages/facilitator && npx jest near-live)
 ```
 
 ---
