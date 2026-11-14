@@ -6,7 +6,7 @@
 
 SecureLambda is a pay-per-run evaluation service for data owners and model builders. A hospital can keep patient records; an AI team can keep its model. SecureLambda brings the two together for a bounded evaluation, then returns rounded metrics instead of either party’s files.
 
-**Try the dashboard preview:** [secure-lambda402-server-api.vercel.app](https://secure-lambda402-server-api.vercel.app/) · **See the proof:** [a paid NEAR testnet run](https://testnet.nearblocks.io/txns/67fYJJtxNqFM33UeXMWfAvP5ELkp4vDZWnWfQMCJUkXj) · **Read the integration guide:** [docs/api/integration-guide.md](docs/api/integration-guide.md)
+**Try the dashboard preview:** [secure-lambda402.vercel.app](https://secure-lambda402.vercel.app/) · **See the proof:** [a paid NEAR testnet run](https://testnet.nearblocks.io/txns/67fYJJtxNqFM33UeXMWfAvP5ELkp4vDZWnWfQMCJUkXj) · **Read the integration guide:** [docs/api/integration-guide.md](docs/api/integration-guide.md)
 
 **Real testnet run:** `accuracy 0.89` · `AUC 0.96` · `F1 0.92` · seller paid on-chain. **Evaluator mode: local, not attested.** [Open the settlement](https://testnet.nearblocks.io/txns/67fYJJtxNqFM33UeXMWfAvP5ELkp4vDZWnWfQMCJUkXj).
 
@@ -26,7 +26,7 @@ The intended privacy boundary is simple: the platform stores encrypted assets; t
 
 ## What the screenshots prove
 
-The public dashboard is connected to the live testnet API; its [5-minute guide](https://secure-lambda402-server-api.vercel.app/docs#test-it-in-5-minutes) walks through a run with a sample model. The repository screenshots below are captured outputs from the end-to-end test workflow, showing the backend and payment path.
+The public dashboard is connected to the live testnet API; its [5-minute guide](https://secure-lambda402.vercel.app/docs#test-it-in-5-minutes) walks through a run with a sample model. The repository screenshots below are captured outputs from the end-to-end test workflow, showing the backend and payment path.
 
 **1. Seller publishes a listing; the stored object is ciphertext.**
 
@@ -149,7 +149,7 @@ Built during the NEAR Hackathon; the first commit is 2026-11-14 and there is no 
 
 ## Start here
 
-- [Open the dashboard](https://secure-lambda402-server-api.vercel.app/)
+- [Open the dashboard](https://secure-lambda402.vercel.app/)
 - [Follow the API integration guide](docs/api/integration-guide.md)
 - [Browse the endpoint reference](docs/api/endpoint-reference.md)
 - [Read the deployment and OutLayer runbook](ops/runbook.md)

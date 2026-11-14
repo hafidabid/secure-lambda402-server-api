@@ -342,4 +342,9 @@ describe("configFromEnv", () => {
   test("rejects a cap that is not an integer base-unit amount", () => {
     expect(() => configFromEnv({ SECURELAMBDA_MAX_PER_RUN: "0.01" })).toThrow("SECURELAMBDA_MAX_PER_RUN");
   });
+
+  test("sends agent-wallet approvals to the live dashboard unless overridden", () => {
+    expect(configFromEnv({}).agentWallet?.dashboardUrl).toBe("https://secure-lambda402.vercel.app");
+    expect(configFromEnv({ SECURELAMBDA_DASHBOARD_URL: "http://localhost:3001" }).agentWallet?.dashboardUrl).toBe("http://localhost:3001");
+  });
 });

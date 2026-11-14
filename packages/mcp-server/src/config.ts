@@ -26,7 +26,7 @@ export interface ServerConfig {
 }
 
 const DEFAULT_API_URL = "https://secure-lambda-api.projectdeadwood.my.id";
-const DEFAULT_DASHBOARD_URL = "https://secure-lambda402-server-api.vercel.app";
+const DEFAULT_DASHBOARD_URL = "https://secure-lambda402.vercel.app";
 const DEFAULT_RPC_URL = "https://test.rpc.fastnear.com";
 
 function parseAmount(name: string, value: string | undefined): bigint | undefined {
