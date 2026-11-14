@@ -20,7 +20,7 @@ docker run -d --name sl-demo-minio -e MINIO_ROOT_USER=securelambda -e MINIO_ROOT
   -p "$MINIO_PORT:9000" pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data >/dev/null
 API_PID=""; WORKER_PID=""
 cleanup() {
-  for pid in $API_PID $WORKER_PID; do kill "$pid" 2>/dev/null && wait "$pid" 2>/dev/null; done
+  for pid in $API_PID $WORKER_PID; do kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null || true; done
   docker rm -f $CONTAINERS >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
