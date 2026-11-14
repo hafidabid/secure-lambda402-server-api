@@ -268,6 +268,53 @@ describe("BuyerAgentClient", () => {
     }
   });
 
+  test("a run that outlives the poll timeout reports its id so the caller can keep checking", async () => {
+    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      const path = req.url ?? "";
+      if (req.method === "POST" && !req.headers["x-payment"]) {
+        res.writeHead(402, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(makeTestQuote(path)));
+        return;
+      }
+      if (req.method === "POST") {
+        res.writeHead(202, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ run_id: "run_slow_789", location: "/v1/runs/run_slow_789" }));
+        return;
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: "run_slow_789",
+          listing_id: "lst_1",
+          buyer_id: "buyer.testnet",
+          model_id: "mdl_1",
+          state: "EXECUTING",
+          payment_nonce: "test_nonce_123",
+          attempt: 1,
+          exec_tx_hash: "tx_exec",
+          result: null,
+          error_code: null,
+          mode: "enclave",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, () => resolve()));
+    const client = new BuyerAgentClient({
+      baseUrl: `http://localhost:${(server.address() as AddressInfo).port}`,
+      signer: makeTestSignedPayment,
+      pollIntervalMs: 10,
+      pollTimeoutMs: 50,
+    });
+
+    try {
+      await expect(client.evaluate("lst_1", "mdl_1")).rejects.toThrow(/run_slow_789/);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   test("negative: retry with payment still gets 402 (payment rejected)", async () => {
     const server = createServer(
       (req: IncomingMessage, res: ServerResponse) => {

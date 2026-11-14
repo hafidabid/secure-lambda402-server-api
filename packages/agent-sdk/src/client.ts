@@ -153,7 +153,7 @@ export class BuyerAgentClient {
     while (true) {
       // Check timeout
       if (Date.now() - startTime > this.pollTimeoutMs) {
-        throw new Error("Polling timeout exceeded");
+        throw new Error(`Run ${location.split("/").pop()} is still running after ${Math.round(this.pollTimeoutMs / 1000)}s; check it later at ${location}`);
       }
 
       // Poll the location
