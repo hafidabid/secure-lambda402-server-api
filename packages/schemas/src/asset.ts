@@ -28,6 +28,11 @@ export const UploadAssetResponseSchema = z.object({
 });
 export type UploadAssetResponse = z.infer<typeof UploadAssetResponseSchema>;
 
+export const UploadModelResponseSchema = z.object({
+  model_id: z.string(),
+});
+export type UploadModelResponse = z.infer<typeof UploadModelResponseSchema>;
+
 export const EvaluatorMetadataSchema = z.object({
   version: z.string(),
   project_id: z.string(),

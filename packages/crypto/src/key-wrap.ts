@@ -1,7 +1,8 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { gcm } from "@noble/ciphers/aes";
 import { x25519 } from "@noble/curves/ed25519";
 import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
+import { randomBytes, utf8ToBytes } from "@noble/hashes/utils";
 import {
   buildAad,
   EPK_BYTES,
@@ -11,7 +12,7 @@ import {
   WRAPPED_KEY_CT_BYTES,
 } from "@securelambda/schemas";
 
-const HKDF_INFO = Buffer.from("securelambda/v1/wrap", "utf8");
+const HKDF_INFO = utf8ToBytes("securelambda/v1/wrap");
 const HKDF_SALT = new Uint8Array(0);
 const WRAPPING_KEY_BYTES = 32;
 
@@ -21,8 +22,16 @@ export function generateEvaluatorKeypair(): { publicKey: Buffer; privateKey: Buf
   return { publicKey: Buffer.from(publicKey), privateKey: Buffer.from(privateKey) };
 }
 
-function deriveWrappingKey(sharedSecret: Uint8Array): Buffer {
-  return Buffer.from(hkdf(sha256, sharedSecret, HKDF_SALT, HKDF_INFO, WRAPPING_KEY_BYTES));
+function deriveWrappingKey(sharedSecret: Uint8Array): Uint8Array {
+  return hkdf(sha256, sharedSecret, HKDF_SALT, HKDF_INFO, WRAPPING_KEY_BYTES);
+}
+
+function toBase64(bytes: Uint8Array): string {
+  return btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(""));
+}
+
+function fromBase64(value: string): Uint8Array {
+  return Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
 }
 
 export class EnvelopeError extends Error {
@@ -37,7 +46,7 @@ export class EnvelopeError extends Error {
  * envelope to `ctx` (listing, role, evaluator version, ciphertext hash) via
  * AES-GCM AAD, per docs/03 B7.
  */
-export function wrapKey(kFile: Buffer, evaluatorPublicKey: Buffer, ctx: EnvelopeAadContext): Envelope {
+export function wrapKey(kFile: Uint8Array, evaluatorPublicKey: Uint8Array, ctx: EnvelopeAadContext): Envelope {
   if (evaluatorPublicKey.length !== EPK_BYTES) {
     throw new EnvelopeError(`evaluator public key must be ${EPK_BYTES} bytes`);
   }
@@ -47,16 +56,13 @@ export function wrapKey(kFile: Buffer, evaluatorPublicKey: Buffer, ctx: Envelope
   const wrappingKey = deriveWrappingKey(sharedSecret);
 
   const nonce = randomBytes(WRAP_NONCE_BYTES);
-  const aad = buildAad(ctx);
-  const cipher = createCipheriv("aes-256-gcm", wrappingKey, nonce);
-  cipher.setAAD(aad);
-  const ct = Buffer.concat([cipher.update(kFile), cipher.final(), cipher.getAuthTag()]);
+  const ct = gcm(wrappingKey, nonce, buildAad(ctx)).encrypt(kFile);
 
   return {
     v: 1,
-    epk: Buffer.from(ephemeralPublic).toString("base64"),
-    nonce: nonce.toString("base64"),
-    ct: ct.toString("base64"),
+    epk: toBase64(ephemeralPublic),
+    nonce: toBase64(nonce),
+    ct: toBase64(ct),
     aad_ctx: ctx,
   };
 }
@@ -71,15 +77,15 @@ export function wrapKey(kFile: Buffer, evaluatorPublicKey: Buffer, ctx: Envelope
  */
 export function unwrapKey(
   envelope: Envelope,
-  evaluatorPrivateKey: Buffer,
+  evaluatorPrivateKey: Uint8Array,
   expectedCtx: EnvelopeAadContext,
-): Buffer {
+): Uint8Array {
   if (envelope.v !== 1) {
     throw new EnvelopeError(`unsupported envelope version: ${envelope.v}`);
   }
-  const epk = Buffer.from(envelope.epk, "base64");
-  const nonce = Buffer.from(envelope.nonce, "base64");
-  const ct = Buffer.from(envelope.ct, "base64");
+  const epk = fromBase64(envelope.epk);
+  const nonce = fromBase64(envelope.nonce);
+  const ct = fromBase64(envelope.ct);
   if (epk.length !== EPK_BYTES || nonce.length !== WRAP_NONCE_BYTES || ct.length !== WRAPPED_KEY_CT_BYTES) {
     throw new EnvelopeError("envelope field has an unexpected decoded length");
   }
@@ -97,15 +103,8 @@ export function unwrapKey(
     throw new EnvelopeError("UNWRAP_FAILED: low-order or invalid ephemeral public key");
   }
   const wrappingKey = deriveWrappingKey(sharedSecret);
-  const aad = buildAad(expectedCtx);
-
-  const tag = ct.subarray(ct.length - 16);
-  const ciphertext = ct.subarray(0, ct.length - 16);
   try {
-    const decipher = createDecipheriv("aes-256-gcm", wrappingKey, nonce);
-    decipher.setAAD(aad);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+    return gcm(wrappingKey, nonce, buildAad(expectedCtx)).decrypt(ct);
   } catch (err) {
     throw new EnvelopeError(`UNWRAP_FAILED: ${(err as Error).message}`);
   }

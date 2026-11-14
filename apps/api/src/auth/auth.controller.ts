@@ -1,15 +1,6 @@
 import { Body, Controller, Headers, HttpCode, Post } from "@nestjs/common";
-import { z } from "zod";
-import { ApiError } from "@securelambda/schemas";
+import { ApiError, AuthChallengeRequestSchema, AuthLoginRequestSchema } from "@securelambda/schemas";
 import { AuthService } from "./auth.service";
-
-const ChallengeBody = z.object({ account_id: z.string().min(1) });
-const LoginBody = z.object({
-  account_id: z.string().min(1),
-  public_key: z.string().min(1),
-  signature: z.string().min(1),
-  nonce: z.string().min(1),
-});
 
 @Controller("auth")
 export class AuthController {
@@ -19,7 +10,7 @@ export class AuthController {
   @Post("challenge")
   @HttpCode(200)
   challenge(@Body() body: unknown) {
-    const parsed = ChallengeBody.safeParse(body);
+    const parsed = AuthChallengeRequestSchema.safeParse(body);
     if (!parsed.success) throw new ApiError("VALIDATION_FAILED", parsed.error.message);
     return this.auth.createChallenge(parsed.data.account_id);
   }
@@ -28,7 +19,7 @@ export class AuthController {
   @Post("login")
   @HttpCode(200)
   login(@Body() body: unknown) {
-    const parsed = LoginBody.safeParse(body);
+    const parsed = AuthLoginRequestSchema.safeParse(body);
     if (!parsed.success) throw new ApiError("VALIDATION_FAILED", parsed.error.message);
     const { account_id, public_key, signature, nonce } = parsed.data;
     return this.auth.login({ accountId: account_id, publicKey: public_key, signature, nonce });
