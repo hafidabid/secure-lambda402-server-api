@@ -1,6 +1,5 @@
 export const REPO = "https://github.com/hafidabid/secure-lambda402-server-api";
 export const DOCS = "/docs";
-export const API_REFERENCE = `${REPO}/blob/main/docs/api/endpoint-reference.md`;
 export const LIVE_RUN_TX = "https://testnet.nearblocks.io/txns/67fYJJtxNqFM33UeXMWfAvP5ELkp4vDZWnWfQMCJUkXj";
 
 export const METRICS = [

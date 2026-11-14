@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { API_REFERENCE, DOCS, LIVE_RUN_TX, REPO } from "./data";
+import { DOCS, LIVE_RUN_TX, REPO } from "./data";
 import { NearLogo, SecureLambdaMark } from "./logos";
 import { Reveal } from "./reveal";
 
@@ -48,7 +48,6 @@ export function GetStarted() {
 const FOOTER_LINKS = [
   { label: "Catalog", href: "/listings" },
   { label: "Docs", href: DOCS },
-  { label: "API reference", href: API_REFERENCE },
   { label: "Live testnet run", href: LIVE_RUN_TX },
   { label: "GitHub", href: REPO },
 ];
