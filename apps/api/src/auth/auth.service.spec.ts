@@ -175,3 +175,24 @@ describe("AuthenticatedGuard", () => {
     expect(() => guard.canActivate(ctx({ "x-account-id": " " }))).toThrow(expect.objectContaining({ code: "UNAUTHENTICATED" }));
   });
 });
+
+describe("Route protection", () => {
+  it("every route that acts on behalf of an account is behind a login guard", () => {
+    const { Reflector } = require("@nestjs/core");
+    const { AssetsController } = require("../assets/assets.controller");
+    const { GatewayController } = require("../gateway/gateway.controller");
+    const { RunsController, SellerRunsController } = require("../runs/runs.controller");
+    const { ListingsController } = require("../listings/listings.controller");
+    const reflector = new Reflector();
+    const guards = (target: any, key?: string) => (reflector.get("__guards__", key ? target.prototype[key] : target) ?? []).map((g: any) => g.name);
+
+    expect(guards(AssetsController, "uploadModel")).toContain("AuthenticatedGuard");
+    expect(guards(AssetsController, "uploadDataset")).toContain("SellerAllowListGuard");
+    expect(guards(GatewayController, "evaluate")).toContain("AuthenticatedGuard");
+    expect(guards(RunsController)).toContain("AuthenticatedGuard");
+    expect(guards(SellerRunsController)).toContain("AuthenticatedGuard");
+    for (const m of ["createListing", "patchListing", "publishListing"]) {
+      expect(guards(ListingsController, m)).toContain("SellerAllowListGuard");
+    }
+  });
+});
