@@ -44,6 +44,11 @@ const EnvSchema = z.object({
   AUTH_SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
   AUTH_CHALLENGE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
 
+  /** Browser origins allowed to call the API. "*" allows any origin; otherwise a comma-separated list. */
+  CORS_ORIGINS: z.string().default("*"),
+  /** How many reverse proxies sit in front (nginx = 1), so the rate limit sees the real client IP. 0 = none. */
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).default(0),
+
   RATE_LIMIT_PER_IP_PER_MINUTE: z.coerce.number().int().positive().default(60),
 });
 

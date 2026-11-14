@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { createHash, randomBytes } from "node:crypto";
 import { verifyNep413 } from "@securelambda/facilitator";
 import { ApiError } from "@securelambda/schemas";
+import { PrismaService } from "../common/prisma.service";
 import { RedisService } from "../common/redis.service";
 import type { AppConfig } from "../config";
 
@@ -40,6 +41,7 @@ export interface Session {
 export class AuthService {
   constructor(
     private readonly redis: RedisService,
+    private readonly prisma: PrismaService,
     private readonly config: ConfigService<AppConfig, true>,
     @Inject(FULL_ACCESS_KEY_CHECK) private readonly isFullAccessKey: FullAccessKeyCheck,
   ) {}
@@ -79,6 +81,9 @@ export class AuthService {
     if (!(await this.isFullAccessKey(input.accountId, input.publicKey))) {
       throw new ApiError("UNAUTHENTICATED", "key is not a full-access key of that account");
     }
+
+    // First login creates the account row that listings and runs point at. Proving key ownership is the only gate.
+    await this.prisma.account.upsert({ where: { id: input.accountId }, update: {}, create: { id: input.accountId } });
 
     const token = randomBytes(32).toString("base64url");
     const ttl = this.config.get("AUTH_SESSION_TTL_SECONDS", { infer: true });
