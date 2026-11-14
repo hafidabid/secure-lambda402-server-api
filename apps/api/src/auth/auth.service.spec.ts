@@ -31,8 +31,9 @@ const config = (overrides: Record<string, unknown> = {}) =>
 
 function setup(fullAccess = true) {
   const redis = fakeRedis();
-  const auth = new AuthService(redis as any, config(), async () => fullAccess);
-  return { redis, auth };
+  const prisma = { account: { upsert: jest.fn().mockResolvedValue({}) } };
+  const auth = new AuthService(redis as any, prisma as any, config(), async () => fullAccess);
+  return { redis, auth, prisma };
 }
 
 async function expectUnauthenticated(promise: Promise<unknown>) {
@@ -59,6 +60,15 @@ describe("AuthService (NEP-413 login)", () => {
     const session = await auth.login(input);
     expect(session.account_id).toBe(account);
     await expect(auth.resolve(session.token)).resolves.toBe(account);
+  });
+
+  it("creates the account row on a successful login, and not on a failed one", async () => {
+    const { auth, prisma } = setup();
+    await auth.login((await signedLogin(auth)).input);
+    expect(prisma.account.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { id: account } }));
+    const denied = setup(false);
+    await expectUnauthenticated(denied.auth.login((await signedLogin(denied.auth)).input));
+    expect(denied.prisma.account.upsert).not.toHaveBeenCalled();
   });
 
   it("stores sessions under a hash, never the raw token", async () => {

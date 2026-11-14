@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/target
+.git
+.github
+.live
+secret
+.env
+.env.*
+!.env.example
+**/.DS_Store
+docs
+*.log
