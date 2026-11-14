@@ -64,10 +64,25 @@ function fetchRpc(rpcUrl: string): RpcCall {
   };
 }
 
-/** Lets the subclass reach near-api-js's protected signer so we can broadcast asynchronously ourselves. */
-class SigningAccount extends Account {
-  sign(receiverId: string, actions: Parameters<Account["signAndSendTransaction"]>[0]["actions"]) {
-    return this.signTransaction(receiverId, actions);
+/**
+ * Lets the subclass reach near-api-js's protected signer so we can broadcast asynchronously ourselves.
+ *
+ * `Account.signTransaction` signs with the cached access-key nonce + 1 and never advances it, so a long-lived
+ * process signs every transaction after the first with the same nonce. The network rejects those, and
+ * `broadcast_tx_async` hides the rejection: the tx just never appears. We refresh the nonce from the chain
+ * before each signature and never go below the last one we used.
+ */
+export class SigningAccount extends Account {
+  private lastNonce = 0n;
+
+  async sign(receiverId: string, actions: Parameters<Account["signAndSendTransaction"]>[0]["actions"]) {
+    const publicKey = (await this.connection.signer.getPublicKey(this.accountId, this.connection.networkId)).toString();
+    delete this.accessKeyByPublicKeyCache[publicKey];
+    const found = await this.findAccessKey(receiverId, actions);
+    if (found && found.accessKey.nonce < this.lastNonce) found.accessKey.nonce = this.lastNonce;
+    const signed = await this.signTransaction(receiverId, actions);
+    if (found) this.lastNonce = found.accessKey.nonce + 1n;
+    return signed;
   }
 }
 

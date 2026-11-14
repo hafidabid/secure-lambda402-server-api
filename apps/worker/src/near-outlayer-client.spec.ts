@@ -1,4 +1,9 @@
-import { NearOutLayerClient, parseTxResult, type RpcCall } from "./near-outlayer-client";
+import { KeyPair } from "@near-js/crypto";
+import { actionCreators } from "@near-js/transactions";
+import { Account } from "near-api-js";
+import { InMemorySigner } from "near-api-js";
+import { InMemoryKeyStore } from "near-api-js/lib/key_stores";
+import { NearOutLayerClient, SigningAccount, parseTxResult, type RpcCall } from "./near-outlayer-client";
 
 const HASH = "66cb5fc5995c8ae1696c73740c97fdf89ccd9954dcc714be6d284abecaf4b462";
 const b64 = (s: string) => Buffer.from(s).toString("base64");
@@ -137,5 +142,37 @@ describe("NearOutLayerClient.txStatus", () => {
 
   it("refuses a listing whose evaluator project is not the configured one", async () => {
     await expect(new NearOutLayerClient(opts, jest.fn()).requestExecution("someone-else.testnet/evil", {} as never)).rejects.toThrow(/does not match OUTLAYER_PROJECT/);
+  });
+});
+
+describe("SigningAccount nonces", () => {
+  async function makeAccount(chainNonce: () => number) {
+    const keyStore = new InMemoryKeyStore();
+    const keyPair = KeyPair.fromRandom("ed25519");
+    await keyStore.setKey("testnet", "signer.testnet", keyPair as never);
+    const provider = {
+      query: async () => ({ nonce: chainNonce(), permission: "FullAccess", block_height: 1, block_hash: "x" }),
+      block: async () => ({ header: { hash: "11111111111111111111111111111111" } }),
+    };
+    const connection = { networkId: "testnet", provider, signer: new InMemorySigner(keyStore) };
+    return new SigningAccount(connection as unknown as ConstructorParameters<typeof Account>[0], "signer.testnet");
+  }
+  const actions = [actionCreators.transfer(1n)];
+  const nonceOf = (signed: Awaited<ReturnType<SigningAccount["sign"]>>) => Number(signed[1].transaction.nonce);
+
+  it("signs consecutive transactions with increasing nonces even when the chain has not moved", async () => {
+    const account = await makeAccount(() => 100);
+    const first = nonceOf(await account.sign("outlayer.testnet", actions));
+    const second = nonceOf(await account.sign("outlayer.testnet", actions));
+    const third = nonceOf(await account.sign("outlayer.testnet", actions));
+    expect([first, second, third]).toEqual([101, 102, 103]);
+  });
+
+  it("follows the chain when another process has moved the nonce ahead", async () => {
+    let chain = 100;
+    const account = await makeAccount(() => chain);
+    expect(nonceOf(await account.sign("outlayer.testnet", actions))).toBe(101);
+    chain = 500;
+    expect(nonceOf(await account.sign("outlayer.testnet", actions))).toBe(501);
   });
 });
