@@ -75,7 +75,7 @@ This repo contains a working dashboard, API, worker, evaluator, and agent SDK. T
 | Capability | Status in this repo |
 |---|---|
 | Dashboard | Deployed at Vercel against the live testnet API. `dev:mock` runs it locally against MSW mocks. |
-| API, worker, encryption, scoring | Implemented; 324 tests pass (283 TypeScript, 41 Rust). TypeScript and Rust encryption are checked against shared vectors. |
+| API, worker, encryption, scoring | Implemented; 345 tests pass (304 TypeScript, 41 Rust). TypeScript and Rust encryption are checked against shared vectors. |
 | NEAR payment | A real paid testnet run is captured in `docs/pr-evidence`; x402 quote, forged-payment rejection, settlement, and replay behavior are exercised. |
 | OutLayer TEE | Live on the testnet API: a paid run executed in OutLayer and settled is [recorded here](docs/pr-evidence/outlayer-enclave-run.md). The [screenshots](#what-the-screenshots-prove) and E2E capture use the **local** Rust evaluator. |
 | Attestation | The worker checks OutLayer’s reported WASM hash against the pinned listing version. This service does not independently verify the Intel TDX quote. A matching WASM hash is not a complete proof of hardware attestation. |
