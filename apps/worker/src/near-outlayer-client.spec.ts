@@ -97,6 +97,44 @@ describe("NearOutLayerClient.txStatus", () => {
     expect(await new NearOutLayerClient(opts, rpc).txStatus("TXHASH")).toEqual({ kind: "pending" });
   });
 
+  describe("a transaction the network never observed", () => {
+    const notObserved: RpcCall = async () => {
+      throw { rpcError: { name: "HANDLER_ERROR", cause: { info: { cause: "NOT_OBSERVED" } } } };
+    };
+
+    it("is pending during the grace period, then a transient failure so the worker resubmits", async () => {
+      let clock = 1_000_000;
+      const client = new NearOutLayerClient({ ...opts, notObservedGraceMs: 120_000, now: () => clock }, notObserved);
+      expect(await client.txStatus("DROPPED")).toEqual({ kind: "pending" });
+      clock += 119_000;
+      expect(await client.txStatus("DROPPED")).toEqual({ kind: "pending" });
+      clock += 2_000;
+      expect(await client.txStatus("DROPPED")).toMatchObject({ kind: "completed", success: false, transient: true, code: "RUN_TIMEOUT_UNKNOWN" });
+    });
+
+    it("counts UNKNOWN_TRANSACTION the same way", async () => {
+      let clock = 0;
+      const rpc: RpcCall = async () => {
+        throw { rpcError: { name: "HANDLER_ERROR", cause: { name: "UNKNOWN_TRANSACTION" } } };
+      };
+      const client = new NearOutLayerClient({ ...opts, notObservedGraceMs: 10, now: () => clock }, rpc);
+      expect(await client.txStatus("T")).toEqual({ kind: "pending" });
+      clock = 11;
+      expect(await client.txStatus("T")).toMatchObject({ success: false, transient: true });
+    });
+
+    it("never gives up on a transaction that is known to be executing", async () => {
+      let clock = 0;
+      const pending: RpcCall = async () => {
+        throw { rpcError: { name: "HANDLER_ERROR", cause: { info: { cause: "PENDING" } } } };
+      };
+      const client = new NearOutLayerClient({ ...opts, notObservedGraceMs: 10, now: () => clock }, pending);
+      expect(await client.txStatus("T")).toEqual({ kind: "pending" });
+      clock = 10_000_000;
+      expect(await client.txStatus("T")).toEqual({ kind: "pending" });
+    });
+  });
+
   it("refuses a listing whose evaluator project is not the configured one", async () => {
     await expect(new NearOutLayerClient(opts, jest.fn()).requestExecution("someone-else.testnet/evil", {} as never)).rejects.toThrow(/does not match OUTLAYER_PROJECT/);
   });
