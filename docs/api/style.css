@@ -1,0 +1,31 @@
+@page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+* { box-sizing: border-box; }
+body { font: 10.5pt/1.55 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #1c2430; margin: 0; }
+h1 { font-size: 26pt; margin: 0 0 4pt; letter-spacing: -0.5pt; color: #0b1f33; }
+h2 { font-size: 16pt; margin: 22pt 0 6pt; padding-bottom: 4pt; border-bottom: 2px solid #1f6feb; color: #0b1f33; page-break-after: avoid; }
+h3 { font-size: 12pt; margin: 14pt 0 4pt; color: #0b1f33; page-break-after: avoid; }
+p { margin: 5pt 0; }
+.sub { color: #5b6878; font-size: 11.5pt; margin-bottom: 14pt; }
+.cover { padding: 40pt 0 10pt; border-bottom: 1px solid #d5dbe3; margin-bottom: 14pt; }
+.meta { color: #5b6878; font-size: 9.5pt; }
+code { font: 9pt/1.4 "SF Mono", Menlo, Consolas, monospace; background: #eef2f7; padding: 1px 4px; border-radius: 3px; }
+pre { font: 8.6pt/1.45 "SF Mono", Menlo, Consolas, monospace; background: #0f1720; color: #dbe4ee; padding: 9pt 11pt; border-radius: 6px; white-space: pre-wrap; word-break: break-word; margin: 6pt 0; page-break-inside: avoid; }
+pre code { background: none; padding: 0; color: inherit; }
+table { border-collapse: collapse; width: 100%; margin: 6pt 0; font-size: 9.3pt; page-break-inside: auto; }
+th { background: #0b1f33; color: #fff; text-align: left; padding: 5pt 7pt; }
+td { padding: 5pt 7pt; border-bottom: 1px solid #dde3ea; vertical-align: top; }
+tr { page-break-inside: avoid; }
+.tag { display: inline-block; font: 700 8pt/1 "SF Mono", Menlo, monospace; padding: 3px 6px; border-radius: 3px; color: #fff; }
+.GET { background: #1a7f37; } .POST { background: #1f6feb; } .PATCH { background: #9a6700; }
+.note { border-left: 4px solid #1f6feb; background: #eef5ff; padding: 6pt 10pt; margin: 8pt 0; page-break-inside: avoid; }
+.warn { border-left: 4px solid #cf222e; background: #fff0f0; padding: 6pt 10pt; margin: 8pt 0; page-break-inside: avoid; }
+.ep { page-break-inside: avoid; margin-top: 14pt; }
+.ep h3 { display: flex; align-items: center; gap: 8pt; font-family: "SF Mono", Menlo, monospace; font-size: 10.5pt; }
+.badge { font: 600 8pt/1 -apple-system, Arial, sans-serif; background: #eef2f7; color: #3b4756; padding: 3px 7px; border-radius: 10px; }
+.badge.lock { background: #fff3cd; color: #7a5a00; } .badge.pub { background: #dafbe1; color: #116329; }
+ol, ul { margin: 4pt 0 4pt 18pt; padding: 0; } li { margin: 2pt 0; }
+.flow { display: grid; grid-template-columns: 1fr; gap: 0; margin: 8pt 0; }
+.flow div { border: 1px solid #c9d3df; padding: 5pt 9pt; border-top: 0; }
+.flow div:first-child { border-top: 1px solid #c9d3df; border-radius: 6px 6px 0 0; }
+.flow div:last-child { border-radius: 0 0 6px 6px; }
+.flow b { color: #1f6feb; }
