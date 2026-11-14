@@ -81,17 +81,20 @@ describe("SellerAllowListGuard", () => {
   });
 
   describe("Edge case: Empty allow-list", () => {
-    it("should reject all accounts when allow-list env var is empty", () => {
-      const configService = {
-        get: () => "",
-      } as unknown as ConfigService<AppConfig, true>;
+    const guardWith = (list: string) =>
+      new SellerAllowListGuard({ get: () => list } as unknown as ConfigService<AppConfig, true>);
 
-      const guard = new SellerAllowListGuard(configService);
-      const context = fakeContext({ "x-account-id": "any-account.testnet" });
+    it("should allow any signed-in account when the allow-list is empty", () => {
+      expect(guardWith("").canActivate(fakeContext({ "x-account-id": "any-account.testnet" }))).toBe(true);
+    });
 
-      expect(() => guard.canActivate(context)).toThrow(ApiError);
-      expect(() => guard.canActivate(context)).toThrow(
-        expect.objectContaining({ code: "FORBIDDEN" }),
+    it("should treat a blank or comma-only list as empty", () => {
+      expect(guardWith(" , ,").canActivate(fakeContext({ "x-account-id": "any-account.testnet" }))).toBe(true);
+    });
+
+    it("should still require a signed-in account when the allow-list is empty", () => {
+      expect(() => guardWith("").canActivate(fakeContext({}))).toThrow(
+        expect.objectContaining({ code: "UNAUTHENTICATED" }),
       );
     });
   });

@@ -34,7 +34,7 @@ Base URL: `https://secure-lambda-api.projectdeadwood.my.id`  ·  Companion doc
 | **None** | Nothing. |
 | **Optional login** | Works without login. A valid token lets owners see their own drafts. |
 | **Login** | `Authorization: Bearer <token>` from `/v1/auth/login`. Otherwise `401 UNAUTHENTICATED`. |
-| **Login + seller allow-list** | Login, and your account must be on the seller allow-list. Otherwise `403 FORBIDDEN`. |
+| **Login + seller allow-list** | Login. If the operator set a seller allow-list, your account must be on it, otherwise `403 FORBIDDEN`. With no allow-list configured, any signed-in account qualifies. |
 
 > Do not send `x-account-id`. It is ignored. Identity comes only from the bearer token. A bad or expired token returns `401` on any route, even public ones.
 

@@ -31,7 +31,7 @@ const EnvSchema = z.object({
   PAYMENT_ASSET: z.enum(["near", "usdc"]).default("near"),
   PAYMENT_VALID_MINUTES: z.coerce.number().int().positive().default(15),
 
-  /** Comma-separated NEAR account ids allowed on seller routes tonight (docs/03 A5/FR-14). */
+  /** Comma-separated NEAR account ids allowed on seller routes (docs/03 A5/FR-14). Empty = any signed-in account. */
   SELLER_ALLOW_LIST: z.string().default(""),
 
   /**
