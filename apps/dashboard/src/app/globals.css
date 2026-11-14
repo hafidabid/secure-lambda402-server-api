@@ -3,6 +3,9 @@
 @theme inline {
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-panel: var(--font-barlow), system-ui, sans-serif;
+  --font-engraved: var(--font-barlow-condensed), system-ui, sans-serif;
+  --font-readout: var(--font-azeret), ui-monospace, monospace;
 }
 
 @theme {
@@ -31,6 +34,44 @@
   --color-danger: #b42318;
   --color-danger-ink: #7a1a12;
   --color-danger-soft: #fdecea;
+
+  --color-panel: #e7e5e0;
+  --color-chassis: #d6d3cc;
+  --color-chassis-deep: #c7c3bb;
+  --color-slot: #ecebe7;
+  --color-etch: #1b1b1a;
+  --color-etch-2: #4f4d48;
+  --color-etch-3: #5c5952;
+  --color-display: #1d1d1b;
+  --color-display-line: #34342f;
+  --color-display-dim: #a8a49b;
+  --color-flap: #2e2e2b;
+  --color-flap-off: #262624;
+  --color-flap-ink: #f2efe8;
+  --color-signal: #e8590c;
+  --color-led: #2f9e44;
+}
+
+.instrument {
+  background: var(--color-panel);
+  color: var(--color-etch);
+  font-family: var(--font-panel);
+  font-variant-numeric: tabular-nums;
+}
+
+.instrument ::selection {
+  background: var(--color-signal);
+  color: var(--color-etch);
+}
+
+.instrument :focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 3px;
+}
+
+.instrument a {
+  text-underline-offset: 0.22em;
+  text-decoration-thickness: 1.5px;
 }
 
 body {
