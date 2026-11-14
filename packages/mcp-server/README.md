@@ -52,14 +52,7 @@ Without `NEAR_ACCOUNT_ID` and `NEAR_PRIVATE_KEY`, the server runs read-only: lis
 
 > **Warning.** Every client config below stores `NEAR_PRIVATE_KEY` in plain text on disk (`~/.claude.json`, `claude_desktop_config.json`, `~/.codex/config.toml`). Use a dedicated testnet account that holds only what you are willing to lose, never your main account. Set both spend caps.
 
-Build once from the repo root:
-
-```sh
-npm install
-npm run build
-```
-
-The examples use `/ABS/PATH/secure-lambda402-server-api`; replace it with your checkout's absolute path.
+Published as [`@securelambda/mcp-server`](https://www.npmjs.com/package/@securelambda/mcp-server): a single file with no dependencies, run with `npx` on Node.js 20 or later. To run from a checkout instead, `npm ci && npm run build` at the repo root and point the client at `node packages/mcp-server/dist/index.js`.
 
 ### Claude Code
 
@@ -70,7 +63,7 @@ claude mcp add --scope user \
   --env NEAR_PRIVATE_KEY=ed25519:... \
   --env SECURELAMBDA_MAX_PER_RUN=50000000000000000000000 \
   --env SECURELAMBDA_SESSION_BUDGET=100000000000000000000000 \
-  --transport stdio securelambda -- node /ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js
+  --transport stdio securelambda -- npx -y @securelambda/mcp-server
 ```
 
 Keep an option such as `--transport stdio` between the last `--env` and the server name; otherwise the CLI reads the name as another `KEY=value` pair. Check with `claude mcp get securelambda`.
@@ -83,8 +76,8 @@ Keep an option such as `--transport stdio` between the last `--env` and the serv
 {
   "mcpServers": {
     "securelambda": {
-      "command": "node",
-      "args": ["/ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@securelambda/mcp-server"],
       "env": {
         "SECURELAMBDA_API_URL": "https://secure-lambda-api.projectdeadwood.my.id",
         "NEAR_ACCOUNT_ID": "my-agent.testnet",
@@ -105,8 +98,8 @@ Restart Claude Desktop after editing.
 
 ```toml
 [mcp_servers.securelambda]
-command = "node"
-args = ["/ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js"]
+command = "npx"
+args = ["-y", "@securelambda/mcp-server"]
 tool_timeout_sec = 240
 
 [mcp_servers.securelambda.env]
@@ -117,7 +110,7 @@ SECURELAMBDA_MAX_PER_RUN = "50000000000000000000000"
 SECURELAMBDA_SESSION_BUDGET = "100000000000000000000000"
 ```
 
-`evaluate` polls the run for up to 3 minutes, so raise `tool_timeout_sec` above Codex's default. The CLI equivalent is `codex mcp add securelambda --env KEY=VALUE ... -- node /ABS/PATH/.../dist/index.js`.
+`evaluate` polls the run for up to 3 minutes, so raise `tool_timeout_sec` above Codex's default. The CLI equivalent is `codex mcp add securelambda --env KEY=VALUE ... -- npx -y @securelambda/mcp-server`.
 
 ## Smoke test
 
@@ -126,7 +119,7 @@ printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-  | node packages/mcp-server/dist/index.js
+  | npx -y @securelambda/mcp-server
 ```
 
 ## Listing on NEAR Agent Market

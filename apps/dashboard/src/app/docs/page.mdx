@@ -33,20 +33,12 @@ Everything runs on NEAR testnet. Nothing costs real money.
 
 SecureLambda ships an MCP server, so Claude Code, Claude Desktop or Codex can browse listings, quote a run and pay for it on your behalf. Claude makes its own wallet; you fund it with a plain transfer and no private key goes into any config file.
 
-**1. Build the server.**
-
-```bash
-git clone https://github.com/hafidabid/secure-lambda402-server-api.git
-cd secure-lambda402-server-api
-npm ci && npm run build
-```
-
-**2. Add it to your client.** Replace `/ABS/PATH` with the absolute path of the clone. The two caps are in yoctoNEAR: `50000000000000000000000` is 0.05 NEAR per run, `100000000000000000000000` is 0.1 NEAR for the session.
+**1. Add it to your client.** It runs with `npx`, so there is nothing to install or build; you need Node.js 20 or later. The two caps are in yoctoNEAR: `50000000000000000000000` is 0.05 NEAR per run, `100000000000000000000000` is 0.1 NEAR for the session.
 
 Claude Code:
 
 ```bash
-claude mcp add --scope user --env SECURELAMBDA_MAX_PER_RUN=50000000000000000000000 --env SECURELAMBDA_SESSION_BUDGET=100000000000000000000000 --transport stdio securelambda -- node /ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js
+claude mcp add --scope user --env SECURELAMBDA_MAX_PER_RUN=50000000000000000000000 --env SECURELAMBDA_SESSION_BUDGET=100000000000000000000000 --transport stdio securelambda -- npx -y @securelambda/mcp-server
 ```
 
 Claude Desktop, in `claude_desktop_config.json` (then restart the app):
@@ -55,8 +47,8 @@ Claude Desktop, in `claude_desktop_config.json` (then restart the app):
 {
   "mcpServers": {
     "securelambda": {
-      "command": "node",
-      "args": ["/ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "@securelambda/mcp-server"],
       "env": {
         "SECURELAMBDA_MAX_PER_RUN": "50000000000000000000000",
         "SECURELAMBDA_SESSION_BUDGET": "100000000000000000000000"
@@ -70,8 +62,8 @@ Codex, in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.securelambda]
-command = "node"
-args = ["/ABS/PATH/secure-lambda402-server-api/packages/mcp-server/dist/index.js"]
+command = "npx"
+args = ["-y", "@securelambda/mcp-server"]
 tool_timeout_sec = 240
 
 [mcp_servers.securelambda.env]
@@ -79,9 +71,9 @@ SECURELAMBDA_MAX_PER_RUN = "50000000000000000000000"
 SECURELAMBDA_SESSION_BUDGET = "100000000000000000000000"
 ```
 
-**3. Connect Claude's wallet.** Ask Claude: *"Connect a SecureLambda agent wallet with 0.1 NEAR."* It generates a key on your computer and gives you a link. Open it, connect your wallet and send the amount; the page shows each step until the transfer lands. Claude can spend at most what you send, and nothing in your own account.
+**2. Connect Claude's wallet.** Ask Claude: *"Connect a SecureLambda agent wallet with 0.1 NEAR."* It generates a key on your computer and gives you a link. Open it, connect your wallet and send the amount; the page shows each step until the transfer lands. Claude can spend at most what you send, and nothing in your own account.
 
-**4. Ask for a run.** Upload your model on the dashboard first (the MCP server does not upload models), then ask: *"Test model `mdl_…` on Diabetes risk, Hospital A, pay at most 0.05 NEAR."* Claude quotes the run, wraps NEAR into wNEAR if needed, pays, and returns the metrics and the receipt.
+**3. Ask for a run.** Upload your model on the dashboard first (the MCP server does not upload models), then ask: *"Test model `mdl_…` on Diabetes risk, Hospital A, pay at most 0.05 NEAR."* Claude quotes the run, wraps NEAR into wNEAR if needed, pays, and returns the metrics and the receipt.
 
 ## How a run works
 
