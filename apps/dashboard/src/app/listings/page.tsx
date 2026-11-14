@@ -4,6 +4,7 @@ import { useDeferredValue, useState } from "react";
 import Link from "next/link";
 import { Search } from "lucide-react";
 import { useListings } from "@/lib/queries";
+import { JudgeBanner } from "@/components/judge-banner";
 import { errorMessage, formatNear } from "@/lib/format";
 import { Btn, Engraved, Page, PageError, PageTitle, Skeleton } from "@/components/ui";
 
@@ -15,6 +16,7 @@ export default function CatalogPage() {
 
   return (
     <Page>
+      <JudgeBanner />
       <PageTitle
         aside={
           <label className="flex h-11 w-full items-center gap-2 rounded-full bg-slot px-4 shadow-[inset_0_2px_4px_rgba(40,36,28,0.14)] focus-within:outline-2 focus-within:outline-offset-3 focus-within:outline-signal sm:w-[300px]">
