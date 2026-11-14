@@ -5,7 +5,7 @@ import { ApiError } from "@securelambda/schemas";
 import { sellerAllowList, type AppConfig } from "../config";
 
 /**
- * Guard that checks if the account id from x-account-id header is in the seller allow-list.
+ * Guard that checks if the authenticated account (resolved by AuthMiddleware into x-account-id) is in the seller allow-list.
  * Implements fail-closed: if the header is missing or the account is not in the allow-list, access is denied.
  * (docs/03 A5/FR-14)
  */
@@ -19,7 +19,7 @@ export class SellerAllowListGuard implements CanActivate {
 
     // Fail closed: missing or empty header is forbidden
     if (!accountId || typeof accountId !== "string" || accountId.trim() === "") {
-      throw new ApiError("FORBIDDEN", "x-account-id header is required");
+      throw new ApiError("UNAUTHENTICATED", "log in first: send Authorization: Bearer <session>");
     }
 
     // Get allow-list from config

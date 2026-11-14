@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiError } from "@securelambda/schemas";
+import { AuthenticatedGuard } from "../auth/authenticated.guard";
 import { SellerAllowListGuard } from "../auth/seller-allow-list.guard";
 import { AssetsService } from "./assets.service";
 
@@ -56,6 +57,7 @@ export class AssetsController {
    * Multipart form with file field 'ciphertext' and text field 'wrapped_key'.
    */
   @Post("listings/:id/models")
+  @UseGuards(AuthenticatedGuard)
   @UseInterceptors(FileInterceptor("ciphertext"))
   async uploadModel(
     @Param("id") listingId: string,

@@ -1,0 +1,45 @@
+# Production stack. Postgres and Redis are NOT started here: this joins the ones already running on the host
+# (Postgres on :5433, Redis on :6379), each with its own database / Redis db index and user.
+# Secrets come from .env.production, which is never committed.
+name: securelambda
+
+x-common: &common
+  env_file: .env.production
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  # Migrates the database and records the evaluator build. Exits when done.
+  bootstrap:
+    <<: *common
+    restart: "no"
+    build: { context: ., dockerfile: apps/worker/Dockerfile }
+    image: securelambda-worker:latest
+    command: ["sh", "-c", "node ops/deploy/bootstrap.js"]
+
+  api:
+    <<: *common
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    image: securelambda-api:latest
+    # Only the local reverse proxy (nginx) reaches this port.
+    ports: ["127.0.0.1:3097:3000"]
+    mem_limit: 512m
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    <<: *common
+    image: securelambda-worker:latest
+    mem_limit: 768m
+    depends_on:
+      bootstrap: { condition: service_completed_successfully }

@@ -91,23 +91,26 @@ What *is* proven here: the seller's dataset and the buyer's model are never visi
 </details>
 
 <details>
-<summary><strong>What's real vs. what's simulated in this environment</strong></summary>
+<summary><strong>What's real vs. what's simulated</strong></summary>
 
 <br>
 
-**Implemented and tested** (199 passing tests — 161 TS, 38 Rust, several against real Postgres/Redis, not just mocks):
-- Envelope encryption, cross-checked byte-for-byte between the TypeScript and Rust implementations
-- The Rust evaluator — real scoring logic (clamped logistic regression, accuracy/F1/rank-based AUC), not a stub
-- The full run state machine, including a genuine concurrent-duplicate-delivery race and a cross-process settlement test
-- The x402 quote → verify → settle flow, with rate limits and budgets checked before any price is quoted
-- The buyer-agent SDK, over real HTTP
+**Proven live** against real services (`ops/live-e2e.sh`, 25 checks, output in `docs/pr-evidence/live-e2e-output.txt`):
+- A paid run over HTTP: real sealed upload to **Cloudflare R2**, a real **NEAR testnet** payment, the real **Rust evaluator**, and a settlement transaction you can open in the explorer
+- The **buyer** pays (in wNEAR, from the buyer's own balance); the relayer pays gas only
+- Metrics recomputed independently in TypeScript match the evaluator's
+- A forged payment is refused, and replaying a payment does not charge twice
+- Login is by NEP-413 signature: a typed `x-account-id` is refused, and one account cannot read another's run
 
-**Designed for, but not live-wired** (this sandbox has no real NEAR/OutLayer credentials):
-- Live NEAR RPC — payment verification runs against a `FacilitatorPort` interface; a real NEAR-backed implementation would satisfy the same interface
-- Live OutLayer execution — the worker calls an `OutLayerClient` interface; this build ships a fault-injectable mock. The evaluator it would run is real and tested.
-- Compiling the evaluator to its actual `wasm32-wasip1` target — `cargo test` passes on the native target; CI cross-compiles on every push with a clean toolchain
+**Implemented and tested** (200+ tests, several against real Postgres/Redis): envelope encryption cross-checked between TypeScript and Rust, the full run state machine, the x402 quote → verify → settle flow, the buyer SDK.
 
-**Not in this build:** escrow/refund contracts, non-logistic-regression models, EVM, NEP-413 wallet sign-in (uses a seller allow-list instead), the Next.js dashboard, live NEAR mainnet.
+**Login:** `POST /v1/auth/challenge` returns a single-use nonce; the caller signs it (NEP-413, no gas, no transaction) with a full-access key of their account and sends it to `POST /v1/auth/login`, which returns a bearer session (1 hour, stored hashed in Redis). The account id on every request comes from that session. The `x-account-id` header is ignored (`AUTH_MODE=signed`, the default); `AUTH_MODE=header` exists for local development only and the API refuses to start with it in production. The SDK does this for you: `createNearLogin(...)` is passed as the client's `headers`, and the CLI logs in with `NEAR_ACCOUNT_ID`/`NEAR_PRIVATE_KEY`. Only the buyer who paid can read a run, its receipt or its event stream.
+
+**Still simulated or missing:**
+- Login has no rate limit on `/auth/challenge` yet beyond the global per-IP limit; sessions cannot be listed or revoked other than by logout or expiry.
+- **No hardware enclave.** The worker runs the real evaluator as a local process (`EVALUATOR_MODE=local`). Those runs are labelled `mode: "local"` and are never reported as attested. The OutLayer TEE client does not exist yet; the `OutLayerClient` interface is ready for it.
+- **Sepolia / USDC is not wired.** See "Payment path" below.
+- Escrow/refund contracts, non-logistic-regression models, the dashboard, NEAR mainnet.
 
 </details>
 
@@ -116,8 +119,7 @@ What *is* proven here: the seller's dataset and the buyer's model are never visi
 
 <br>
 
-- MinIO's image isn't pullable here, so asset-storage tests use an in-memory stand-in. The real `StorageService`/`S3StorageClient` code is written against the real API.
-- `~/.rustup` is root-owned in this environment, blocking the `wasm32-wasip1` target install. `cargo test` on the native target is unaffected and fully passing.
+- `~/.cargo` and `~/.rustup` may be root-owned (a `sudo` rustup install). `ops/live-e2e.sh` works around the first by using a project-local `CARGO_HOME`. The `wasm32-wasip1` target install is still blocked in that case; native `cargo test` is unaffected.
 
 </details>
 
@@ -125,15 +127,24 @@ What *is* proven here: the seller's dataset and the buyer's model are never visi
 
 ## Payment path
 
-NEAR native is the default asset; USDC is configurable but untested (no `storage_deposit` flow here). Per `apps/api`'s gateway and `packages/facilitator`:
+Buyers pay in a NEP-141 token (wNEAR by default, `wrap.testnet` on testnet). Per `apps/api`'s gateway and `packages/facilitator`:
 
-1. **Quote** — `POST /v1/listings/:id/evaluate` without payment → `402` with price, `payTo`, a nonce, a 15-minute window.
-2. **Verify** — retry with a signed payment in `X-Payment`; checked for signature, amount, expiry, nonce reuse. Nothing spent yet.
-3. **Execute** — the run is queued; the worker submits it to the TEE and polls.
-4. **Settle** — only after a successful, hash-verified result does money move. A failed run is never charged.
+1. **Quote** — `POST /v1/listings/:id/evaluate` without payment → `402` with price, `payTo`, the token contract, a nonce, a 15-minute window.
+2. **Sign** — the buyer SDK signs a NEP-366 *delegate action* that calls `ft_transfer`. It sends nothing to the chain. If the buyer holds only native NEAR, the SDK can wrap it into wNEAR first (`autoWrapNear`, 1:1).
+3. **Verify** — retry with the signed payment in `X-Payment`. The facilitator checks the signed bytes against the quote, the signing key on-chain, the nonce, the expiry and the buyer's token balance. Nothing spent yet.
+4. **Execute** — the run is queued; the worker runs the evaluator.
+5. **Settle** — only after a successful, hash-verified result does the relayer submit the delegate. A failed run is never charged.
+
+**Why a token and not native NEAR:** on NEAR, the deposit of any action inside a delegate is charged to the *relayer*, not the sender. A native `Transfer` would let buyers spend the platform's money. `ft_transfer` debits the buyer's balance inside the token contract; the relayer only pays gas. The first version of this build got this wrong, and the live test caught it.
+
+**Seller onboarding:** a seller must register once on the token contract (`storage_deposit`, see `ensureRegisteredOnToken`), or payments to them are refused before any compute is spent.
+
+**USDC:** any NEP-141 works by configuration (`PAYMENT_TOKEN_CONTRACT`). Sepolia USDC lives on a different chain and cannot be swapped into NEAR testnet tokens; supporting it means a second facilitator (EVM, EIP-3009), not a swap.
 
 Build the evaluator for its real target with `cd crates/evaluator && cargo build --release --target wasm32-wasip1` — see `ops/runbook.md` for the key-generation and deployment steps.
 
 ---
 
-**Status:** core backend implemented and tested end to end against sandboxed chain/TEE seams. Wiring in real NEAR + OutLayer credentials is the remaining step to a live deployment — both were built as swappable interfaces for exactly that.
+**Status:** core backend works end to end against real NEAR testnet, Cloudflare R2 and the real Rust evaluator. The remaining gaps for a real deployment are the TEE client and secure login (see "What's real vs. what's simulated").
+
+To reproduce the live run: put credentials in `./secret` (gitignored) and run `ops/live-e2e.sh`. See `ops/runbook.md`.

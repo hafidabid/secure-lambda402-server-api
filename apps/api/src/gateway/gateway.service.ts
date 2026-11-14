@@ -88,7 +88,7 @@ export class GatewayService {
       throw new ApiError(verifyResult.code, verifyResult.reason);
     }
 
-    const runId = await this.createRunAndEnqueue(listing.id, buyerId, modelId, payment);
+    const runId = await this.createRunAndEnqueue(listing.id, buyerId, modelId, payment, cachedQuote);
     return this.respondForRun(runId);
   }
 
@@ -126,7 +126,7 @@ export class GatewayService {
   }
 
   private async issueQuote(
-    listing: { id: string; sellerId: string; priceAmount: { toString(): string }; priceAsset: string },
+    listing: { id: string; sellerId: string; priceAmount: { toFixed(decimalPlaces?: number): string }; priceAsset: string },
     resource: string,
   ): Promise<X402Quote> {
     const validMinutes = this.configService.get("PAYMENT_VALID_MINUTES", { infer: true });
@@ -137,8 +137,10 @@ export class GatewayService {
       scheme: "exact",
       network: `near:${this.configService.get("NEAR_NETWORK", { infer: true })}`,
       asset: listing.priceAsset === "usdc" ? "usdc" : "near",
-      maxAmountRequired: listing.priceAmount.toString(),
+      // toFixed, not toString: Decimal prints 10^22 as "1e+22", which is not a valid integer string.
+      maxAmountRequired: listing.priceAmount.toFixed(0),
       payTo: listing.sellerId,
+      assetContract: this.configService.get("PAYMENT_TOKEN_CONTRACT", { infer: true }) || undefined,
       resource,
       validUntil,
       nonce,
@@ -171,6 +173,7 @@ export class GatewayService {
     buyerId: string,
     modelId: string,
     payment: SignedPayment,
+    quote: X402Accept,
   ): Promise<string> {
     const runId = `run_${randomUUID()}`;
     await this.prisma.$transaction([
@@ -193,6 +196,7 @@ export class GatewayService {
           payerPublicKey: payment.payerPublicKey,
           payTo: payment.payTo,
           asset: payment.asset,
+          assetContract: quote.assetContract ?? null,
           amount: payment.amount,
           validUntil: new Date(payment.validUntil),
           maxBlockHeight: payment.maxBlockHeight,
@@ -211,22 +215,26 @@ export class GatewayService {
     while (Date.now() < deadline) {
       const run = await this.prisma.run.findUnique({ where: { id: runId } });
       if (run && (run.state === "SETTLED" || run.state === "FAILED_NOT_CHARGED")) {
-        return this.buildResponseForRun(run);
+        return await this.buildResponseForRun(run);
       }
       await new Promise((resolve) => setTimeout(resolve, INLINE_WAIT_STEP_MS));
     }
     return { kind: "pending", body: { run_id: runId, location: `/v1/runs/${runId}` } };
   }
 
-  private buildResponseForRun(run: {
+  private async buildResponseForRun(run: {
     id: string;
     state: string;
     mode: string;
     resultJson: unknown;
     execTxHash: string | null;
     errorCode: string | null;
-  }): EvaluateResult {
+  }): Promise<EvaluateResult> {
     if (run.state === "SETTLED" && run.resultJson) {
+      const [payment, attestation] = await Promise.all([
+        this.prisma.payment.findUnique({ where: { runId: run.id } }),
+        this.prisma.attestation.findUnique({ where: { runId: run.id } }),
+      ]);
       return {
         kind: "success",
         body: {
@@ -235,9 +243,10 @@ export class GatewayService {
           result: run.resultJson as EvaluateSuccessResponse["result"],
           receipt: {
             exec_tx: run.execTxHash ?? "",
-            settle_tx: null,
-            wasm_hash: "",
-            attested: run.mode === "enclave",
+            settle_tx: payment?.settleTxHash ?? null,
+            wasm_hash: attestation?.wasmHash ?? "",
+            // Only a verified TEE run counts. A "local" run matched the wasm hash but never ran in an enclave.
+            attested: run.mode === "enclave" && (attestation?.verified ?? false),
           },
         },
       };

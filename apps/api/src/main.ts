@@ -1,14 +1,28 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "./app.module";
 import { ApiErrorFilter } from "./common/api-error.filter";
+import { loadConfig } from "./config";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { logger: ["log", "warn", "error"] });
+  const config = loadConfig();
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: ["log", "warn", "error"] });
   app.useGlobalFilters(new ApiErrorFilter());
   app.setGlobalPrefix("v1", { exclude: ["healthz", "readyz"] });
-  const port = process.env.PORT ? Number(process.env.PORT) : 3000;
-  await app.listen(port);
+  if (config.TRUST_PROXY_HOPS > 0) app.set("trust proxy", config.TRUST_PROXY_HOPS);
+
+  // Callers authenticate with a bearer token, not cookies, so allowing any origin does not expose a session.
+  const origins = config.CORS_ORIGINS.split(",").map((o) => o.trim()).filter(Boolean);
+  app.enableCors({
+    origin: origins.includes("*") ? true : origins,
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["authorization", "content-type", "x-payment"],
+    exposedHeaders: ["location"],
+    maxAge: 600,
+  });
+
+  await app.listen(config.PORT);
 }
 
 bootstrap();
