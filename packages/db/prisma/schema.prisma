@@ -145,6 +145,8 @@ model Payment {
   payerPublicKey  String   @map("payer_public_key")
   payTo           String   @map("pay_to")
   asset           String
+  // NEP-141 token contract the payment was quoted in (null in sandbox mode).
+  assetContract   String?  @map("asset_contract")
   amount          Decimal  @db.Decimal(38, 0)
   validUntil      DateTime @map("valid_until") @db.Timestamptz(6)
   maxBlockHeight  BigInt   @map("max_block_height")

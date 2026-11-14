@@ -1,46 +1,58 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { isTerminal, POLL_INTERVAL_MS, type RunState } from "@securelambda/schemas";
 import { api } from "./api";
+import { useSession } from "./session";
+
+const FIRST_PAGE: string | null = null;
 
 export function useListings(q: string) {
-  return useQuery({ queryKey: ["listings", q], queryFn: () => api.listListings(q || undefined) });
+  return useInfiniteQuery({
+    queryKey: ["listings", q],
+    queryFn: ({ pageParam }) => api.listListings(q, pageParam),
+    initialPageParam: FIRST_PAGE,
+    getNextPageParam: (last) => last.next_cursor,
+  });
 }
 
-export function useListing(id: string, account?: string | null) {
-  return useQuery({ queryKey: ["listing", id], queryFn: () => api.getListing(id, account), enabled: !!id });
+export function useListing(id: string) {
+  const { token } = useSession();
+  return useQuery({ queryKey: ["listing", id, !!token], queryFn: () => api.getListing(id, token), enabled: !!id });
 }
 
 export function useEvaluator() {
   return useQuery({ queryKey: ["evaluator"], queryFn: api.getEvaluator, staleTime: Infinity });
 }
 
-// ponytail: polling only; SSE (/runs/:id/events) first with this as the fallback lands with the integration
 export function useRun(id: string) {
+  const { token } = useSession();
   return useQuery({
-    queryKey: ["run", id],
-    queryFn: () => api.getRun(id),
+    queryKey: ["run", id, token],
+    queryFn: () => api.getRun(id, token ?? ""),
+    enabled: !!token,
     refetchInterval: (q) => (q.state.data && isTerminal(q.state.data.state) ? false : POLL_INTERVAL_MS),
   });
 }
 
 // Keyed on run state so the receipt refetches once more when the run turns terminal (settle_tx lands with SETTLED).
 export function useReceipt(id: string, state: RunState | undefined) {
+  const { token } = useSession();
   return useQuery({
-    queryKey: ["receipt", id, state],
-    queryFn: () => api.getReceipt(id),
-    enabled: !!state,
+    queryKey: ["receipt", id, state, token],
+    queryFn: () => api.getReceipt(id, token ?? ""),
+    enabled: !!state && !!token,
     placeholderData: (prev) => prev,
     refetchInterval: state && isTerminal(state) ? false : POLL_INTERVAL_MS,
   });
 }
 
-export function useSellerRuns(account: string | null) {
+export function useSellerRuns() {
+  const { token } = useSession();
   return useQuery({
-    queryKey: ["seller-runs", account],
-    queryFn: () => api.getSellerRuns(account ?? ""),
-    enabled: !!account,
+    queryKey: ["seller-runs", token],
+    queryFn: () => api.getSellerRuns(token ?? ""),
+    enabled: !!token,
     refetchInterval: POLL_INTERVAL_MS * 2,
   });
 }

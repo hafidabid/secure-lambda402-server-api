@@ -17,13 +17,13 @@ describe("Base64Schema (CR-17)", () => {
 describe("buildAad", () => {
   it("joins the AAD domain and context deterministically", () => {
     const aad = buildAad({ listing: "lst_1", role: "dataset", ev: "1.0.0", ct_sha256: "a".repeat(64) });
-    expect(aad.toString("utf8")).toBe(`securelambda/v1||lst_1||dataset||1.0.0||${"a".repeat(64)}`);
+    expect(new TextDecoder().decode(aad)).toBe(`securelambda/v1||lst_1||dataset||1.0.0||${"a".repeat(64)}`);
   });
 
   it("produces a different AAD for a different listing (CR-04 depends on this)", () => {
     const a = buildAad({ listing: "lst_1", role: "dataset", ev: "1.0.0", ct_sha256: "a".repeat(64) });
     const b = buildAad({ listing: "lst_2", role: "dataset", ev: "1.0.0", ct_sha256: "a".repeat(64) });
-    expect(a.equals(b)).toBe(false);
+    expect(a).not.toEqual(b);
   });
 });
 

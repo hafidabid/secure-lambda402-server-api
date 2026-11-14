@@ -8,9 +8,12 @@ import type { AppConfig } from "../config";
 export class StorageService {
   private readonly client: S3Client;
   private readonly bucket: string;
+  private readonly keyPrefix: string;
 
   constructor(configService: ConfigService<AppConfig, true>) {
     this.bucket = configService.get("STORAGE_BUCKET", { infer: true });
+    const prefix = configService.get("STORAGE_KEY_PREFIX", { infer: true }).replace(/^\/+|\/+$/g, "");
+    this.keyPrefix = prefix ? `${prefix}/` : "";
     this.client = new S3Client({
       endpoint: configService.get("STORAGE_ENDPOINT", { infer: true }),
       region: configService.get("STORAGE_REGION", { infer: true }),
@@ -32,12 +35,12 @@ export class StorageService {
 
   async putCiphertext(key: string, body: Buffer): Promise<void> {
     await this.client.send(
-      new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: "application/octet-stream" }),
+      new PutObjectCommand({ Bucket: this.bucket, Key: this.keyPrefix + key, Body: body, ContentType: "application/octet-stream" }),
     );
   }
 
   async getCiphertext(key: string): Promise<Buffer> {
-    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.keyPrefix + key }));
     const chunks: Buffer[] = [];
     for await (const chunk of result.Body as AsyncIterable<Buffer>) {
       chunks.push(Buffer.from(chunk));

@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef } from "react";
-import { Check, FileUp, Lock, RotateCcw } from "lucide-react";
+import { FileUp, Lock, RotateCcw } from "lucide-react";
 import type { SealStep } from "@/lib/seal";
 import { shortHash } from "@/lib/format";
-import { Btn, cn } from "./ui";
+import { Display, Led, cn, type LedTone } from "./ui";
 
 export type DropState = "idle" | "valid" | "invalid";
+
+const DROP_LED: Record<DropState, LedTone> = { idle: "off", valid: "ok", invalid: "signal" };
 
 export function FileDrop({
   accept,
@@ -23,8 +24,6 @@ export function FileDrop({
   placeholder: string;
   onFile: (f: File) => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
-  const dark = state !== "idle";
   return (
     <label
       onDragOver={(e) => e.preventDefault()}
@@ -34,12 +33,11 @@ export function FileDrop({
         if (f) onFile(f);
       }}
       className={cn(
-        "flex cursor-pointer items-center gap-3.5 rounded-[14px] border-[1.5px] p-[18px] transition-colors",
-        dark ? "border-ink bg-ink" : "border-dashed border-line-strong bg-surface hover:border-ink",
+        "flex cursor-pointer items-center gap-4 rounded-[20px] bg-slot p-4 shadow-[inset_0_2px_4px_rgba(40,36,28,0.14)] transition-colors focus-within:outline-2 focus-within:outline-offset-3 focus-within:outline-signal",
+        state === "idle" && "border-2 border-dashed border-chassis-deep hover:border-etch-3",
       )}
     >
       <input
-        ref={input}
         type="file"
         accept={accept}
         className="sr-only"
@@ -49,38 +47,36 @@ export function FileDrop({
           e.target.value = "";
         }}
       />
-      <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-[10px]", dark ? "bg-code" : "border border-line bg-paper")}>
-        {dark ? <Lock className="size-5 text-glow" /> : <FileUp className="size-5" />}
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-chassis shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+        {state === "idle" ? <FileUp className="size-5" /> : <Lock className="size-5" />}
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className={cn("truncate text-[15px] font-medium", dark ? "text-white" : "text-ink")}>{file?.name ?? placeholder}</span>
-        <span className={cn("font-mono text-xs", dark ? "text-code-dim" : "text-muted")}>{meta}</span>
+        <span className="truncate text-[16px] font-semibold">{file?.name ?? placeholder}</span>
+        <span className="truncate text-[13px] text-etch-3">{meta}</span>
       </span>
-      {state === "valid" && (
-        <span className="inline-flex h-6 items-center gap-1.5 rounded-full bg-seal-deep px-2.5 font-mono text-xs font-medium text-glow">
-          <Check className="size-3" strokeWidth={3} />Valid
+      {state !== "idle" && (
+        <span className="flex shrink-0 items-center gap-2 text-[13px] font-medium">
+          <Led tone={DROP_LED[state]} />
+          {state === "valid" ? "Ready" : "Fix below"}
         </span>
-      )}
-      {state === "invalid" && (
-        <span className="inline-flex h-6 items-center rounded-full bg-danger px-2.5 font-mono text-xs font-medium text-white">Fix below</span>
       )}
     </label>
   );
 }
 
 const STEPS: { key: Exclude<SealStep, "done">; label: string }[] = [
-  { key: "encrypting", label: "Encrypting on this device" },
+  { key: "encrypting", label: "Encrypting on this device and locking to the evaluator" },
   { key: "uploading", label: "Uploading" },
-  { key: "locking", label: "Locking to evaluator" },
 ];
 
-function stepStatus(step: SealStep | null, key: Exclude<SealStep, "done">): "todo" | "now" | "done" {
-  const order: SealStep[] = ["encrypting", "uploading", "locking", "done"];
-  if (step === null) return "todo";
+function stepTone(step: SealStep | null, key: Exclude<SealStep, "done">, failed: boolean): { tone: LedTone; pulse: boolean } {
+  const order: SealStep[] = ["encrypting", "uploading", "done"];
+  if (step === null) return { tone: "off", pulse: false };
   const at = order.indexOf(step);
   const me = order.indexOf(key);
-  if (at > me) return "done";
-  return at === me ? "now" : "todo";
+  if (at > me) return { tone: "ok", pulse: false };
+  if (at === me) return failed ? { tone: "signal", pulse: false } : { tone: "ok", pulse: true };
+  return { tone: "off", pulse: false };
 }
 
 export function EncryptProgress({
@@ -95,25 +91,28 @@ export function EncryptProgress({
   onRetry: () => void;
 }) {
   return (
-    <section aria-live="polite" className="flex flex-col gap-2.5 rounded-[14px] bg-ink p-[18px]">
+    <Display aria-live="polite" className="flex flex-col gap-3 p-5">
       {STEPS.map(({ key, label }) => {
-        const s = stepStatus(step, key);
+        const { tone, pulse } = stepTone(step, key, !!failed);
         return (
-          <div key={key} className={cn("flex items-center gap-3 text-[13px]", s === "todo" ? "text-code-dim" : "text-code-text")}>
-            {s === "done" && <span className="flex size-4 items-center justify-center rounded-full bg-seal-deep"><Check className="size-2.5 text-glow" strokeWidth={3} /></span>}
-            {s === "now" && <span className="size-4 animate-pulse rounded-full border-2 border-glow" />}
-            {s === "todo" && <span className="size-4 rounded-full border-[1.5px] border-[#3A414C]" />}
-            {label}
-            {key === "locking" && <span className="ml-auto font-mono text-xs text-code-dim">{shortHash(wasmHash)}</span>}
+          <div key={key} className={cn("flex items-center gap-3 text-[14px]", tone === "off" && "text-display-dim")}>
+            <Led tone={tone} pulse={pulse} />
+            <span className="flex-1">{label}</span>
+            {key === "encrypting" && <span className="hidden font-readout text-[12px] text-display-dim sm:inline">{shortHash(wasmHash)}</span>}
           </div>
         );
       })}
+      {step === "done" && <div className="flex items-center gap-3 text-[14px]"><Led tone="ok" />Locked to the evaluator</div>}
       {failed && (
-        <div className="mt-1 flex items-center justify-between gap-3 border-t border-code-line pt-3">
-          <span className="text-[13px] text-[#F5B8B0]">{failed}</span>
-          <Btn variant="outline" className="h-8" onClick={onRetry}><RotateCcw />Retry</Btn>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-display-line pt-3">
+          <span className="text-[14px] text-flap-ink">{failed}</span>
+          <button onClick={onRetry} className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border-[1.5px] border-flap-ink px-4 text-[14px] font-semibold hover:bg-flap-ink hover:text-display">
+            <RotateCcw className="size-4" />
+            Retry
+          </button>
         </div>
       )}
-    </section>
+    </Display>
   );
 }
+

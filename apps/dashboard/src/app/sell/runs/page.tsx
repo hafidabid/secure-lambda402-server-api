@@ -3,67 +3,68 @@
 import Link from "next/link";
 import type { RunState } from "@securelambda/schemas";
 import { useSellerRuns } from "@/lib/queries";
-import { useWallet } from "@/lib/wallet";
-import { ApiRequestError } from "@/lib/api";
-import { formatTime, userMessage } from "@/lib/format";
-import { Badge, Btn, Card, PageError } from "@/components/ui";
+import { errorMessage, formatTime } from "@/lib/format";
+import { Engraved, Led, Page, PageError, PageTitle, Panel, Slot, type LedTone } from "@/components/ui";
+import { SignInGate } from "@/components/gate";
 
-function stateTone(state: RunState): string {
-  if (state === "SETTLED") return "bg-seal-soft text-seal-strong";
-  if (state === "FAILED_NOT_CHARGED" || state === "PAYMENT_REJECTED") return "bg-surface-2 text-ink-2";
-  return "bg-warn-soft text-warn";
+function stateTone(state: RunState): LedTone {
+  if (state === "SETTLED") return "ok";
+  if (state === "FAILED_NOT_CHARGED" || state === "PAYMENT_REJECTED") return "off";
+  return "signal";
 }
 
-export default function SellerRunsPage() {
-  const wallet = useWallet();
-  const { data: runs, isLoading, error } = useSellerRuns(wallet.accountId);
+const th = "whitespace-nowrap px-4 py-2.5 text-left font-engraved text-[12px] font-semibold uppercase tracking-[0.12em] text-etch-3";
 
-  if (wallet.status !== "connected") {
-    return (
-      <div className="mx-auto flex max-w-[720px] flex-col items-start gap-4 px-6 py-16">
-        <h1 className="text-[26px] font-semibold tracking-tight">Connect your wallet to see runs</h1>
-        <Btn onClick={() => wallet.connect("hospital.testnet")}>Connect wallet</Btn>
-      </div>
-    );
-  }
-
+function SellerRuns() {
+  const { data: runs, isLoading, error } = useSellerRuns();
   const settled = runs?.filter((r) => r.state === "SETTLED").length ?? 0;
 
   return (
-    <div className="mx-auto flex max-w-[1100px] flex-col gap-5 px-6 py-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Runs on your data</h1>
-        <span className="font-mono text-sm text-muted">{settled} paid · {runs?.length ?? 0} total</span>
-      </div>
-      {error && <PageError message={userMessage(error instanceof ApiRequestError ? error.code : "NETWORK")} />}
-      <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse font-mono text-[12.5px]">
+    <Page>
+      <PageTitle aside={<span className="font-readout text-[14px] text-etch-2">{settled} paid · {runs?.length ?? 0} total</span>}>
+        Runs on your data
+      </PageTitle>
+      <p className="-mt-2 text-[15px] text-etch-2">Who ran a model on your listings and when. You never see their model or score.</p>
+      {error && <PageError message={errorMessage(error)} />}
+      <Panel className="flex flex-col gap-3">
+        <Engraved className="px-1">Latest first</Engraved>
+        <Slot className="overflow-x-auto">
+          <table className="w-full border-collapse text-[14px]">
             <thead>
-              <tr className="border-b border-line text-left font-sans text-xs text-muted">
-                <th className="px-4 py-2.5 font-medium">Time</th>
-                <th className="px-4 py-2.5 font-medium">Run</th>
-                <th className="px-4 py-2.5 font-medium">Buyer</th>
-                <th className="px-4 py-2.5 font-medium">State</th>
+              <tr className="border-b border-chassis-deep/60">
+                <th className={th}>Time</th>
+                <th className={th}>Run</th>
+                <th className={th}>Buyer</th>
+                <th className={th}>State</th>
               </tr>
             </thead>
             <tbody>
-              {isLoading && <tr><td colSpan={4} className="px-4 py-6 text-center font-sans text-muted">Loading…</td></tr>}
+              {isLoading && <tr><td colSpan={4} className="px-4 py-6 text-center text-etch-3">Loading…</td></tr>}
               {runs?.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-10 text-center font-sans text-muted">No runs yet. <Link href="/sell/new" className="text-seal">List a dataset</Link></td></tr>
+                <tr><td colSpan={4} className="px-4 py-10 text-center text-etch-3">No runs yet. <Link href="/sell/new" className="font-semibold text-etch underline">List a dataset</Link></td></tr>
               )}
               {runs?.map((r) => (
-                <tr key={r.id} className="border-b border-surface-2 last:border-0">
-                  <td className="whitespace-nowrap px-4 py-2.5 text-muted">{formatTime(r.created_at)}</td>
-                  <td className="whitespace-nowrap px-4 py-2.5"><Link href={`/runs/${r.id}`} className="hover:text-seal">{r.id}</Link></td>
-                  <td className="whitespace-nowrap px-4 py-2.5">{r.buyer_id}</td>
-                  <td className="px-4 py-2.5"><Badge className={stateTone(r.state)}>{r.state.toLowerCase().replaceAll("_", " ")}</Badge></td>
+                <tr key={r.id} className="border-b border-chassis-deep/40 last:border-0">
+                  <td className="whitespace-nowrap px-4 py-2.5 font-readout text-[13px] text-etch-3">{formatTime(r.created_at)}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 font-readout text-[13px]">{r.id}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5 font-readout text-[13px]">{r.buyer_id}</td>
+                  <td className="whitespace-nowrap px-4 py-2.5">
+                    <span className="inline-flex items-center gap-2 text-[13px]"><Led tone={stateTone(r.state)} />{r.state.toLowerCase().replaceAll("_", " ")}</span>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-      </Card>
-    </div>
+        </Slot>
+      </Panel>
+    </Page>
+  );
+}
+
+export default function SellerRunsPage() {
+  return (
+    <SignInGate title="Sign in to see runs on your data" lead="Sign in with the NEAR account that owns your listings.">
+      <SellerRuns />
+    </SignInGate>
   );
 }

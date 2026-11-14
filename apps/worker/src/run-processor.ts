@@ -91,7 +91,7 @@ export class RunProcessor {
     // Persist the tx hash BEFORE polling (docs/03 B5: "stored BEFORE waiting").
     const claim = await prisma.run.updateMany({
       where: { id: run.id, state: "QUEUED" },
-      data: { state: "SUBMITTED", execTxHash: txHash },
+      data: { state: "SUBMITTED", execTxHash: txHash, ...(this.deps.outlayer.mode ? { mode: this.deps.outlayer.mode } : {}) },
     });
     if (claim.count !== 1) return null;
     await this.logEvent(run.id, "QUEUED", "SUBMITTED", { execTxHash: txHash });
@@ -206,7 +206,7 @@ export class RunProcessor {
       payerPublicKey: payment.payerPublicKey,
       payTo: payment.payTo,
       asset: payment.asset as PaymentAsset,
-      amount: payment.amount.toString(),
+      amount: payment.amount.toFixed(0), // never exponent notation, see GatewayService.issueQuote
       validUntil: payment.validUntil.toISOString(),
       maxBlockHeight: Number(payment.maxBlockHeight),
       signedDelegate: payment.signedPayload.toString("base64"),
@@ -217,6 +217,7 @@ export class RunProcessor {
       asset: signedPayment.asset,
       maxAmountRequired: signedPayment.amount,
       payTo: signedPayment.payTo,
+      assetContract: payment.assetContract ?? undefined,
       resource: `/v1/listings/${run.listingId}/evaluate`,
       validUntil: signedPayment.validUntil,
       nonce: signedPayment.nonce,
@@ -246,6 +247,8 @@ export class RunProcessor {
     const failureCount = await this.deps.prisma.runEvent.count({
       where: { runId: run.id, toState: "SETTLE_PENDING" },
     });
+    // eslint-disable-next-line no-console
+    console.warn(`run ${run.id} settlement attempt ${failureCount} failed: ${settleResult.reason}`);
     if (failureCount >= 3) {
       // eslint-disable-next-line no-console
       console.error(`ALERT: run ${run.id} has failed to settle ${failureCount} times (docs/03 B11 alert threshold)`);

@@ -31,7 +31,7 @@ function toListingDto(dbListing: any): Listing {
     name: dbListing.name,
     schema: dbListing.schemaJson,
     sample_rows: dbListing.sampleRows,
-    price_amount: dbListing.priceAmount.toString(),
+    price_amount: dbListing.priceAmount.toFixed(0), // toString() would give "1e+22" for large NEAR amounts
     price_asset: dbListing.priceAsset,
     rules: dbListing.rulesJson,
     evaluator_version: dbListing.evaluatorVersion,

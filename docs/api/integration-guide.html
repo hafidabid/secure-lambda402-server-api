@@ -1,0 +1,162 @@
+<!doctype html><html><head><meta charset="utf-8"><title>SecureLambda Integration Guide</title><link rel="stylesheet" href="style.css"></head><body>
+<div class="cover">
+<h1>SecureLambda Integration Guide</h1>
+<div class="sub">How to connect a buyer agent, a seller tool or a frontend to the SecureLambda API</div>
+<div class="meta">Base URL: <code>https://secure-lambda-api.projectdeadwood.my.id</code> &nbsp;·&nbsp; Network: NEAR testnet &nbsp;·&nbsp; Companion document: <i>Endpoint Reference</i></div>
+</div>
+
+<h2>1. What SecureLambda does</h2>
+<p>SecureLambda lets a <b>seller</b> offer a private dataset for model testing, and lets a <b>buyer</b> pay per run to find out how well their own model scores on it. Neither side sees the other's raw material: the dataset and the model are both uploaded <b>encrypted</b>, and only a sealed evaluator program can open them. The buyer gets back a few summary numbers (accuracy, AUC, F1) and a receipt. The seller gets paid.</p>
+<table><tr><th>Role</th><th>What they do</th></tr>
+<tr><td><b>Seller</b></td><td>Creates a listing, uploads an encrypted dataset, publishes it. Must be on the seller allow-list.</td></tr>
+<tr><td><b>Buyer</b> (usually an AI agent)</td><td>Browses listings, uploads an encrypted model, pays per run with NEAR, reads the score.</td></tr>
+<tr><td><b>Relayer</b> (the service)</td><td>Submits the buyer's signed payment to the blockchain after the score is ready and pays the network fee.</td></tr>
+<tr><td><b>Evaluator</b></td><td>The program that decrypts both files, scores the model and returns only summary metrics.</td></tr></table>
+
+<h2>2. The whole flow at a glance</h2>
+<div class="flow">
+<div><b>1. Log in</b> – prove you own a NEAR account by signing a one-time challenge (no gas, no transaction).</div>
+<div><b>2. Seller:</b> create listing → seal and upload dataset → publish.</div>
+<div><b>3. Buyer:</b> find a listing → seal and upload a model.</div>
+<div><b>4. Buyer:</b> ask to run it → the service answers <code>402</code> with a price quote.</div>
+<div><b>5. Buyer:</b> sign the payment locally and repeat the request with an <code>X-Payment</code> header.</div>
+<div><b>6.</b> The service verifies the payment, the evaluator scores the model, then the payment is settled on-chain.</div>
+<div><b>7. Buyer:</b> receives the score and a receipt (immediately, or by polling a run).</div>
+</div>
+<div class="note"><b>The buyer is only charged when a score is delivered.</b> If a run fails, nothing is taken.</div>
+
+<h2>3. Basics</h2>
+<table><tr><th>Item</th><th>Value</th></tr>
+<tr><td>Base URL</td><td><code>https://secure-lambda-api.projectdeadwood.my.id</code>. All API routes start with <code>/v1</code>. Health checks are at <code>/healthz</code> and <code>/readyz</code> (no prefix).</td></tr>
+<tr><td>Format</td><td>JSON, except file uploads (<code>multipart/form-data</code>). Field names are <code>snake_case</code>.</td></tr>
+<tr><td>HTTPS</td><td>Required. Plain HTTP redirects to HTTPS.</td></tr>
+<tr><td>CORS</td><td>Currently open to any origin. Allowed headers: <code>authorization</code>, <code>content-type</code>, <code>x-payment</code>. The <code>location</code> header is readable by browsers.</td></tr>
+<tr><td>Upload limit</td><td>1 MiB per file (the encrypted file).</td></tr>
+<tr><td>Rate limits</td><td>Per IP: 60 evaluate requests per minute. Per listing: the seller sets <code>runs_per_day</code> and <code>lifetime_budget</code> per buyer. Over the limit gives <code>429 RATE_LIMITED</code> or <code>403 BUDGET_EXHAUSTED</code>.</td></tr>
+<tr><td>Currency</td><td>wNEAR (<code>wrap.testnet</code>), 24 decimals. Prices are integer strings in base units: <code>"10000000000000000000000"</code> = 0.01 NEAR.</td></tr></table>
+
+<h2>4. Logging in (NEP-413)</h2>
+<p>There are no passwords or API keys. You prove you own a NEAR account by signing a message with that account's <b>full-access key</b>. Signing happens on your side and nothing is sent to the blockchain. The private key never leaves your machine.</p>
+<ol>
+<li><code>POST /v1/auth/challenge</code> with <code>{"account_id":"buyer.testnet"}</code>. You get back a one-time <code>nonce</code>, the <code>message</code> to sign and the <code>recipient</code>. The challenge expires in 5 minutes and works once.</li>
+<li>Sign it using NEP-413 with those exact values.</li>
+<li><code>POST /v1/auth/login</code> with <code>account_id</code>, <code>public_key</code> (<code>ed25519:...</code>), <code>signature</code> (base64) and the <code>nonce</code>. You get <code>{ "token", "account_id", "expires_in": 3600 }</code>.</li>
+<li>Send <code>Authorization: Bearer &lt;token&gt;</code> on every later request. When it expires (1 hour) or you get <code>401</code>, log in again.</li></ol>
+<div class="warn"><b>Do not send an <code>x-account-id</code> header.</b> The server ignores it and decides who you are only from your token. The first successful login creates your account automatically.</div>
+<h3>Easiest: use the SDK</h3>
+<pre><code>import { BuyerAgentClient, createNearLogin, createNearPaymentSigner } from "@securelambda/agent-sdk";
+
+const baseUrl = "https://secure-lambda-api.projectdeadwood.my.id"; // no trailing /v1
+const accountId = "buyer.testnet";
+const privateKey = process.env.NEAR_PRIVATE_KEY!; // "ed25519:..." (keep it secret)
+
+const client = new BuyerAgentClient({
+  baseUrl,
+  headers: createNearLogin({ baseUrl, accountId, privateKey }),   // logs in and renews the session
+  signer: createNearPaymentSigner({ accountId, privateKey, autoWrapNear: true }),
+});
+const result = await client.evaluate(listingId, modelId);        // handles 402, payment and polling
+console.log(result.result.metrics, result.receipt);</code></pre>
+<h3>Without the SDK (any language)</h3>
+<p>The signed bytes are <code>sha256( borsh(u32 tag = 2147484061) ++ borsh(payload) )</code> where the payload is <code>{ message: string, nonce: [u8;32], recipient: string, callbackUrl: Option&lt;string&gt; }</code> (callbackUrl is <code>None</code>). Sign the 32-byte hash with ed25519 and send the signature as base64. This is the standard NEP-413 format, so existing NEAR wallet libraries can produce it.</p>
+
+<h2>5. Seller guide</h2>
+<ol>
+<li><b>Get the evaluator's public key:</b> <code>GET /v1/evaluator</code> returns <code>version</code>, <code>public_key</code> (base64, 32 bytes) and <code>wasm_hash</code>. You will encrypt to this key.</li>
+<li><b>Create a draft listing:</b> <code>POST /v1/listings</code> with the name, the data schema, 5 synthetic sample rows, the price, the rules and the evaluator version. Details are in the Endpoint Reference.</li>
+<li><b>Seal your dataset</b> (a CSV: feature columns plus the label column) with the crypto package, then upload it:
+<pre><code>import { sealFile } from "@securelambda/crypto";
+
+const evPub = Buffer.from(evaluator.public_key, "base64");
+const sealed = sealFile(Buffer.from(csvText), evPub,
+  { listing: listingId, role: "dataset", ev: evaluator.version });
+
+const form = new FormData();
+form.set("ciphertext", new Blob([sealed.blob]), "dataset.bin");
+form.set("wrapped_key", JSON.stringify(sealed.envelope));
+await fetch(`${baseUrl}/v1/listings/${listingId}/dataset`,
+  { method: "POST", headers: auth, body: form });</code></pre></li>
+<li><b>Publish:</b> <code>POST /v1/listings/:id/publish</code>. A listing cannot be published without a dataset. To edit a published listing you must pause it first.</li>
+<li><b>Get paid:</b> payments go straight to your NEAR account in wNEAR, after each successful run. See <i>Payments</i> below for the one-time setup.</li>
+<li><b>See activity:</b> <code>GET /v1/seller/runs</code> lists runs on your listings: id, buyer, state and time. You never see the buyer's model or the result.</li></ol>
+<div class="note">Seller routes only work for accounts on the <b>seller allow-list</b>. Others get <code>403 FORBIDDEN</code>. To be added, ask the operator.</div>
+
+<h2>6. Buyer guide</h2>
+<ol>
+<li><b>Browse:</b> <code>GET /v1/listings?q=...&amp;limit=20&amp;cursor=...</code> returns <code>{ items, next_cursor }</code>. Each item shows the schema, sample rows, price and evaluator version.</li>
+<li><b>Prepare a model.</b> A model is a small JSON file for logistic regression:
+<pre><code>{ "features": ["age", "glucose"], "weights": [0.03, 0.04], "bias": -5.1 }</code></pre>
+The feature names must match the listing's schema. Extra keys are rejected.</li>
+<li><b>Seal and upload it</b> the same way as the dataset, with <code>role: "model"</code>, to <code>POST /v1/listings/:id/models</code>. The response contains your <code>model_id</code>.</li>
+<li><b>Run it:</b> <code>POST /v1/listings/:id/evaluate</code> with <code>{"model_id":"..."}</code>.
+<ul><li>First call (no payment) returns <b>402</b> with a quote.</li>
+<li>Sign the payment for exactly that quote and call again with <code>X-Payment: &lt;base64 JSON&gt;</code>.</li>
+<li>You get <b>200</b> with the result, or <b>202</b> with a <code>location</code> to poll.</li></ul></li>
+<li><b>Read the result:</b> <code>GET /v1/runs/:id</code> until <code>state</code> is final (<code>SETTLED</code>, <code>FAILED_NOT_CHARGED</code> or <code>PAYMENT_REJECTED</code>), then <code>GET /v1/runs/:id/receipt</code>.</li></ol>
+<h3>The 402 quote</h3>
+<pre><code>{ "x402Version": 1,
+  "accepts": [{
+    "scheme": "exact", "network": "near:testnet", "asset": "near",
+    "maxAmountRequired": "10000000000000000000000",
+    "payTo": "seller.testnet",
+    "assetContract": "wrap.testnet",
+    "resource": "/v1/listings/lst_123/evaluate",
+    "validUntil": "2026-11-14T12:15:00.000Z",
+    "nonce": "..." }] }</code></pre>
+<p>The quote is valid for 15 minutes. The <code>nonce</code> is single-use, so a payment can never be applied twice.</p>
+<h3>The result</h3>
+<pre><code>{ "run_id": "run_...", "mode": "local",
+  "result": { "metrics": { "accuracy": 0.89, "auc": 0.96, "f1": 0.92 }, "n_bucket": "200-499" },
+  "receipt": { "exec_tx": "...", "settle_tx": "67fYJJ...", "wasm_hash": "3fed6a...", "attested": false } }</code></pre>
+<p>The exact number of rows is hidden on purpose; you only see a size bucket. <code>settle_tx</code> is the real blockchain transaction you can look up in a NEAR explorer.</p>
+
+<h2>7. Payments</h2>
+<ul>
+<li><b>Token:</b> payment is made in <b>wNEAR</b> (wrapped NEAR, <code>wrap.testnet</code>). It is 1:1 with NEAR. It exists because the buyer's money must be taken from their token balance, not from the service.</li>
+<li><b>What you sign:</b> a NEP-366 <i>delegate action</i> that calls <code>ft_transfer</code> on wNEAR for exactly the quoted amount to the seller. You do not submit anything. The service submits it <b>after</b> the score is ready and pays the gas (about 0.0002 NEAR).</li>
+<li><b>Buyer needs wNEAR.</b> If you only hold NEAR, the SDK can wrap it for you (<code>autoWrapNear: true</code>); this spends your NEAR. Otherwise call <code>near_deposit</code> on <code>wrap.testnet</code> yourself.</li>
+<li><b>Seller one-time setup:</b> the seller account must be registered on the token contract (NEP-145 <code>storage_deposit</code> on <code>wrap.testnet</code>). Otherwise payments to it fail verification.</li>
+<li><b>Safety:</b> the service checks the signature, that your key is really on your account, your balance, the seller's registration and the expiry before doing any work. Replaying a payment returns the same run and does not charge again.</li>
+<li><b>Failed runs are free.</b> You are only charged once a result exists.</li></ul>
+<div class="note"><b>Not supported yet:</b> Sepolia/EVM USDC. Only NEAR testnet payments work today.</div>
+
+<h2>8. Run states and honesty labels</h2>
+<table><tr><th>State</th><th>Meaning</th></tr>
+<tr><td><code>REQUESTED</code> … <code>QUEUED</code> … <code>EXECUTING</code></td><td>Payment accepted and the run is in progress. Keep polling.</td></tr>
+<tr><td><code>RESULT_READY</code>, <code>SETTLE_PENDING</code></td><td>Score is ready; the payment is being settled.</td></tr>
+<tr><td><code>SETTLED</code></td><td><b>Success.</b> Result and receipt are available.</td></tr>
+<tr><td><code>FAILED_NOT_CHARGED</code></td><td>The run failed. Nothing was charged. See <code>error_code</code>.</td></tr>
+<tr><td><code>PAYMENT_REJECTED</code></td><td>The payment did not verify. Nothing was charged.</td></tr></table>
+<p><code>mode</code> is <code>local</code> today: the evaluator is a normal program on the operator's server. Runs are only labelled <code>attested</code> (<code>true</code>) when a hardware-secured enclave produced them. Today <code>attested</code> is always <code>false</code>, so trust the operator accordingly.</p>
+
+<h2>9. Errors</h2>
+<p>Every error has the same shape: <code>{ "error": { "code": "...", "message": "...", "retryable": true|false } }</code>. Branch on <code>code</code>, not on the message.</p>
+<table><tr><th>HTTP</th><th>Code</th><th>What to do</th></tr>
+<tr><td>401</td><td><code>UNAUTHENTICATED</code></td><td>Log in again. Token missing, bad or expired, or the login proof failed.</td></tr>
+<tr><td>403</td><td><code>FORBIDDEN</code> / <code>NOT_OWNER</code></td><td>Not allowed: not on the seller allow-list, or not the owner of the listing.</td></tr>
+<tr><td>403</td><td><code>BUDGET_EXHAUSTED</code></td><td>You used this listing's lifetime run budget.</td></tr>
+<tr><td>404</td><td><code>LISTING_NOT_FOUND</code> / <code>MODEL_NOT_FOUND</code></td><td>Wrong id. Runs of other users also return 404.</td></tr>
+<tr><td>402</td><td><code>PAYMENT_REQUIRED</code> / <code>PAYMENT_INVALID</code> / <code>PAYMENT_EXPIRED</code></td><td>Pay the quote, or fix the payment (the message says why, for example insufficient balance). Expired: ask for a new quote.</td></tr>
+<tr><td>409</td><td><code>PAYMENT_REUSED</code>, <code>CONFLICT</code>, <code>LISTING_NOT_PUBLISHED</code>, <code>MODEL_BOUND_TO_OTHER_LISTING</code></td><td>The request conflicts with current state.</td></tr>
+<tr><td>413</td><td><code>ASSET_TOO_LARGE</code></td><td>File over 1 MiB.</td></tr>
+<tr><td>422</td><td><code>VALIDATION_FAILED</code>, <code>ENVELOPE_INVALID</code>, <code>UNWRAP_FAILED</code>, <code>DECRYPT_FAILED</code></td><td>Bad request body or bad encryption. Re-seal with the right listing, role and evaluator version.</td></tr>
+<tr><td>429</td><td><code>RATE_LIMITED</code></td><td>Slow down; retry later.</td></tr>
+<tr><td>500</td><td><code>INTERNAL</code></td><td>Retry; if it persists, contact the operator.</td></tr></table>
+<p>A run can also end with <code>error_code</code> such as <code>DATA_UNUSABLE</code> or <code>MODEL_UNUSABLE</code> (the files decrypted but could not be scored, for example the model's features do not match). These are never charged.</p>
+
+<h2>10. Building a frontend</h2>
+<ul>
+<li>The API allows browser calls from any origin for now. Once your frontend has a domain, ask the operator to restrict it.</li>
+<li>Do the NEP-413 signing with a NEAR wallet (for example via wallet selector's <code>signMessage</code>); never ask users to paste private keys.</li>
+<li>Keep the token in memory or session storage, and send it as <code>Authorization: Bearer</code>.</li>
+<li><b>Live progress:</b> <code>GET /v1/runs/:id/events</code> streams updates (Server-Sent Events). The browser's built-in <code>EventSource</code> cannot send an <code>Authorization</code> header, so read the stream with <code>fetch</code> and a stream reader, or simply poll <code>GET /v1/runs/:id</code> every 1–3 seconds.</li>
+<li>The browser must never contain the evaluator's private key, only its public key.</li></ul>
+
+<h2>11. Going live checklist</h2>
+<table><tr><th>Who</th><th>Check</th></tr>
+<tr><td>Everyone</td><td>NEAR account with a full-access key; testnet NEAR from a faucet.</td></tr>
+<tr><td>Seller</td><td>Account on the allow-list · registered on <code>wrap.testnet</code> · dataset CSV matches the schema · sealed with the current evaluator version.</td></tr>
+<tr><td>Buyer</td><td>wNEAR balance ≥ price (or <code>autoWrapNear</code>) · model JSON uses the listing's feature names · sealed with <code>role: "model"</code>.</td></tr>
+<tr><td>Both</td><td>Never log or send a private key. Handle <code>401</code> by logging in again. Treat <code>retryable: false</code> errors as final.</td></tr></table>
+<p class="meta">Questions about the allow-list, limits or restricting CORS go to the service operator.</p>
+</body></html>

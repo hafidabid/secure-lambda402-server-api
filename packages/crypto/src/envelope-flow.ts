@@ -1,10 +1,11 @@
-import { createHash } from "node:crypto";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex } from "@noble/hashes/utils";
 import type { AssetRole, Envelope } from "@securelambda/schemas";
 import { decryptFile, encryptFile } from "./file-cipher";
 import { unwrapKey, wrapKey } from "./key-wrap";
 
-export function sha256Hex(data: Buffer): string {
-  return createHash("sha256").update(data).digest("hex");
+export function sha256Hex(data: Uint8Array): string {
+  return bytesToHex(sha256(data));
 }
 
 export interface SealContext {
@@ -14,12 +15,12 @@ export interface SealContext {
 }
 
 export interface SealedFile {
-  blob: Buffer;
+  blob: Uint8Array;
   envelope: Envelope;
 }
 
 /** Full browser-side seal: encrypt the file, then wrap K_file bound to the resulting ciphertext hash. */
-export function sealFile(plaintext: Buffer, evaluatorPublicKey: Buffer, ctx: SealContext): SealedFile {
+export function sealFile(plaintext: Uint8Array, evaluatorPublicKey: Uint8Array, ctx: SealContext): SealedFile {
   const { blob, kFile } = encryptFile(plaintext);
   const envelope = wrapKey(kFile, evaluatorPublicKey, { ...ctx, ct_sha256: sha256Hex(blob) });
   return { blob, envelope };
@@ -31,7 +32,7 @@ export function sealFile(plaintext: Buffer, evaluatorPublicKey: Buffer, ctx: Sea
  * K_file bound to that hash plus the caller's own listing/role/version, then
  * decrypt the file.
  */
-export function openFile(blob: Buffer, envelope: Envelope, evaluatorPrivateKey: Buffer, ctx: SealContext): Buffer {
+export function openFile(blob: Uint8Array, envelope: Envelope, evaluatorPrivateKey: Uint8Array, ctx: SealContext): Uint8Array {
   const kFile = unwrapKey(envelope, evaluatorPrivateKey, { ...ctx, ct_sha256: sha256Hex(blob) });
   return decryptFile(blob, kFile);
 }

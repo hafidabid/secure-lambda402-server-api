@@ -1,3 +1,4 @@
+import { Decimal } from "@prisma/client/runtime/library";
 import { ApiError } from "@securelambda/schemas";
 import { GatewayService } from "./gateway.service";
 import { generatePayerKeypair, signPayment } from "@securelambda/facilitator";
@@ -33,7 +34,7 @@ function buildRedis() {
 const LISTING = {
   id: "lst_1",
   sellerId: "seller.testnet",
-  priceAmount: { toString: () => "1000" },
+  priceAmount: new Decimal("1000"), // a real Prisma Decimal, as the database returns it
   priceAsset: "near",
   status: "published",
   rulesJson: { runs_per_day: 20, lifetime_budget: 200 },
@@ -55,7 +56,8 @@ describe("GatewayService.evaluate", () => {
       listing: { findUnique: jest.fn(async () => LISTING) },
       model: { findUnique: jest.fn(async () => MODEL) },
       run: { count: jest.fn(async () => 0), findUnique: jest.fn(async () => null), create: jest.fn() },
-      payment: { create: jest.fn() },
+      payment: { create: jest.fn(), findUnique: jest.fn(async () => null) },
+      attestation: { findUnique: jest.fn(async () => null) },
       $transaction: jest.fn(async (ops: unknown[]) => ops),
     };
     redis = buildRedis();
@@ -141,6 +143,13 @@ describe("GatewayService.evaluate", () => {
     }
   });
 
+  it("PY-01b: a realistic NEAR price (0.01 NEAR = 10^22 yocto) is quoted as a plain integer, not \"1e+22\"", async () => {
+    // Regression: Decimal.toString() switches to exponent notation for large values, which is not a valid amount.
+    prisma.listing.findUnique.mockResolvedValue({ ...LISTING, priceAmount: new Decimal("10000000000000000000000") });
+    const result = await service.evaluate("lst_1", "buyer.testnet", "mdl_1", "1.2.3.4", undefined);
+    expect(result.kind === "quote" && result.quote.accepts[0]!.maxAmountRequired).toBe("10000000000000000000000");
+  });
+
   it("PAYMENT_INVALID when the X-Payment nonce does not match any cached quote", async () => {
     const payment = signedPaymentFor("n_unknown");
     const header = Buffer.from(JSON.stringify(payment)).toString("base64");
@@ -211,5 +220,34 @@ describe("GatewayService.evaluate", () => {
     expect(prisma.run.create).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();
     expect(result.kind).toBe("success");
+  });
+
+  describe("receipt on a settled run", () => {
+    const settledRun = (mode: "enclave" | "local") => ({
+      id: "run_receipt",
+      state: "SETTLED",
+      mode,
+      resultJson: { metrics: { accuracy: 0.9, auc: 0.9, f1: 0.9 }, n_bucket: "100-199" },
+      execTxHash: "tx_exec",
+      errorCode: null,
+      paymentNonce: "n_receipt",
+    });
+    const evaluateSettled = async (mode: "enclave" | "local") => {
+      prisma.run.findUnique.mockImplementation(async () => settledRun(mode));
+      prisma.payment.findUnique.mockResolvedValue({ settleTxHash: "SETTLE_HASH" });
+      prisma.attestation.findUnique.mockResolvedValue({ wasmHash: "a".repeat(64), verified: true });
+      const header = Buffer.from(JSON.stringify(signedPaymentFor("n_receipt"))).toString("base64");
+      const result = await service.evaluate("lst_1", "buyer.testnet", "mdl_1", "1.2.3.4", header);
+      if (result.kind !== "success") throw new Error("expected success");
+      return result.body.receipt;
+    };
+
+    it("carries the real settle tx and wasm hash, and is attested only for a verified enclave run", async () => {
+      expect(await evaluateSettled("enclave")).toEqual({ exec_tx: "tx_exec", settle_tx: "SETTLE_HASH", wasm_hash: "a".repeat(64), attested: true });
+    });
+
+    it("never reports a local (non-TEE) run as attested, even when the wasm hash matched", async () => {
+      expect((await evaluateSettled("local")).attested).toBe(false);
+    });
   });
 });

@@ -1,12 +1,14 @@
 import type { EvaluatorMetadata, Listing } from "@securelambda/schemas";
 
 export const EVALUATOR: EvaluatorMetadata = {
-  version: "v1.0.0",
+  version: "1.0.0",
   project_id: "securelambda.testnet/evaluator",
   wasm_hash: "a91f03c2e4b7d0185f6c3a9e2b4d7f10c8e5a3b6d9f2e1c4a7b0d3e67d44be19",
   public_key: "q7Yk0n4Jx1m2P3sT5vW8zA9cE1gH3jL5nQ7rU9wY0bE=",
   trust_tier: 1,
 };
+
+export const SELLER_ALLOW_LIST = ["hospital.testnet", "clinic.testnet"];
 
 const now = "2026-11-14T09:00:00.000Z";
 const TWO_NEAR = "2000000000000000000000000";
@@ -38,7 +40,7 @@ export const LISTINGS: Listing[] = [
     price_amount: TWO_NEAR,
     price_asset: "near",
     rules: RULES,
-    evaluator_version: "v1.0.0",
+    evaluator_version: "1.0.0",
     dataset_asset_id: "ast_ds_01",
     status: "published",
     created_at: now,
@@ -68,7 +70,7 @@ export const LISTINGS: Listing[] = [
     price_amount: "3500000000000000000000000",
     price_asset: "near",
     rules: RULES,
-    evaluator_version: "v1.0.0",
+    evaluator_version: "1.0.0",
     dataset_asset_id: "ast_ds_02",
     status: "published",
     created_at: now,

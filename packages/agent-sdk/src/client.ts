@@ -7,6 +7,7 @@ import {
   EvaluateSuccessResponse,
   EvaluatePendingResponseSchema,
   RunSchema,
+  ReceiptSchema,
   isTerminal,
 } from "@securelambda/schemas";
 
@@ -19,6 +20,11 @@ export type PaymentSigner = (quote: X402Accept) => Promise<SignedPayment> | Sign
 export interface BuyerAgentClientOptions {
   baseUrl: string;
   signer: PaymentSigner;
+  /**
+   * Extra headers sent on every request. A function is called per request, so a session token can be refreshed
+   * (see `createNearLogin`). Not for `x-account-id`: the API ignores it unless it runs in dev header mode.
+   */
+  headers?: Record<string, string> | (() => Promise<Record<string, string>>);
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
 }
@@ -30,14 +36,20 @@ export interface BuyerAgentClientOptions {
 export class BuyerAgentClient {
   private readonly baseUrl: string;
   private readonly signer: PaymentSigner;
+  private readonly extraHeaders: NonNullable<BuyerAgentClientOptions["headers"]>;
   private readonly pollIntervalMs: number;
   private readonly pollTimeoutMs: number;
 
   constructor(options: BuyerAgentClientOptions) {
     this.baseUrl = options.baseUrl;
     this.signer = options.signer;
+    this.extraHeaders = options.headers ?? {};
     this.pollIntervalMs = options.pollIntervalMs ?? 3000;
     this.pollTimeoutMs = options.pollTimeoutMs ?? 180000;
+  }
+
+  private async authHeaders(): Promise<Record<string, string>> {
+    return typeof this.extraHeaders === "function" ? this.extraHeaders() : this.extraHeaders;
   }
 
   /**
@@ -47,11 +59,12 @@ export class BuyerAgentClient {
   async evaluate(listingId: string, modelId: string): Promise<EvaluateSuccessResponse> {
     const url = `${this.baseUrl}/v1/listings/${listingId}/evaluate`;
     const body = JSON.stringify({ model_id: modelId });
+    const authHeaders = await this.authHeaders();
 
     // First request without payment
     let response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...authHeaders, "Content-Type": "application/json" },
       body,
     });
 
@@ -74,6 +87,7 @@ export class BuyerAgentClient {
       response = await fetch(url, {
         method: "POST",
         headers: {
+          ...authHeaders,
           "Content-Type": "application/json",
           "X-Payment": paymentHeader,
         },
@@ -82,7 +96,10 @@ export class BuyerAgentClient {
 
       // Check if we got another 402 (payment rejected)
       if (response.status === 402) {
-        throw new Error("payment rejected");
+        // The gateway says why (e.g. PAYMENT_INVALID: insufficient balance); pass that on instead of a bare "rejected".
+        const body = (await response.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+        const detail = body.error ? `: ${body.error.code} - ${body.error.message}` : "";
+        throw new Error(`payment rejected${detail}`);
       }
     }
 
@@ -116,7 +133,7 @@ export class BuyerAgentClient {
       }
 
       // Poll the location
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: await this.authHeaders() });
       if (!response.ok) {
         throw new Error(`Poll request failed: ${response.status}`);
       }
@@ -130,16 +147,16 @@ export class BuyerAgentClient {
           if (!run.result) {
             throw new Error("SETTLED run missing result field");
           }
+          // The run object has no payment/attestation data, so ask the receipt endpoint for the real values.
+          const receiptResponse = await fetch(`${url}/receipt`, { headers: await this.authHeaders() });
+          const receipt = receiptResponse.ok
+            ? ReceiptSchema.parse(await receiptResponse.json())
+            : { exec_tx: run.exec_tx_hash ?? "", settle_tx: null, wasm_hash: "", attested: false };
           return EvaluateSuccessResponseSchema.parse({
             run_id: run.id,
             mode: run.mode,
             result: run.result,
-            receipt: {
-              exec_tx: run.exec_tx_hash ?? "",
-              settle_tx: null,
-              wasm_hash: "",
-              attested: run.mode === "enclave",
-            },
+            receipt,
           });
         }
 

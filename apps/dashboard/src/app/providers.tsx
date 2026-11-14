@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WalletProvider } from "@/lib/wallet";
+import { SessionProvider } from "@/lib/session";
 
 const MOCKING = process.env.NEXT_PUBLIC_API_MOCKING === "enabled";
 
@@ -21,7 +22,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <WalletProvider>{children}</WalletProvider>
+      <WalletProvider>
+        <SessionProvider>{children}</SessionProvider>
+      </WalletProvider>
     </QueryClientProvider>
   );
 }

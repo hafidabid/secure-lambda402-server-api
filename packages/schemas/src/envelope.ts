@@ -40,9 +40,6 @@ export const FILE_NONCE_BYTES = 12;
 export const GCM_TAG_BYTES = 16;
 export const AAD_DOMAIN = "securelambda/v1";
 
-export function buildAad(ctx: EnvelopeAadContext): Buffer {
-  return Buffer.from(
-    [AAD_DOMAIN, ctx.listing, ctx.role, ctx.ev, ctx.ct_sha256].join("||"),
-    "utf8",
-  );
+export function buildAad(ctx: EnvelopeAadContext): Uint8Array {
+  return new TextEncoder().encode([AAD_DOMAIN, ctx.listing, ctx.role, ctx.ev, ctx.ct_sha256].join("||"));
 }

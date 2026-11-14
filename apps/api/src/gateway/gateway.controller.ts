@@ -1,6 +1,7 @@
-import { Body, Controller, Headers, HttpCode, Ip, Param, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Headers, HttpCode, Ip, Param, Post, Req, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { EvaluateRequestDtoSchema, ApiError } from "@securelambda/schemas";
+import { AuthenticatedGuard } from "../auth/authenticated.guard";
 import { GatewayService } from "./gateway.service";
 
 @Controller("listings")
@@ -9,6 +10,7 @@ export class GatewayController {
 
   /** POST /v1/listings/:id/evaluate (docs/03 B4, x402 quote/verify/settle). */
   @Post(":id/evaluate")
+  @UseGuards(AuthenticatedGuard)
   @HttpCode(200)
   async evaluate(
     @Param("id") listingId: string,
