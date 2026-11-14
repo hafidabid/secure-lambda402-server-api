@@ -9,7 +9,7 @@ describe("sealFile / openFile", () => {
     const ctx = { listing: "lst_01H", role: "dataset" as const, ev: "1.0.0" };
 
     const { blob, envelope } = sealFile(plaintext, publicKey, ctx);
-    expect(openFile(blob, envelope, privateKey, ctx)).toEqual(plaintext);
+    expect(Buffer.from(openFile(blob, envelope, privateKey, ctx))).toEqual(plaintext);
   });
 
   it("SC-04 / CR-04: a wrapped key sealed for one listing cannot be opened under another", () => {

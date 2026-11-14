@@ -32,9 +32,9 @@ function buildVector(description: string, plaintext: Buffer, ctx: Omit<EnvelopeA
     evaluator_private_key_hex: privateKey.toString("hex"),
     evaluator_public_key_hex: publicKey.toString("hex"),
     ctx: fullCtx,
-    k_file_hex: kFile.toString("hex"),
+    k_file_hex: Buffer.from(kFile).toString("hex"),
     envelope,
-    file_blob_hex: blob.toString("hex"),
+    file_blob_hex: Buffer.from(blob).toString("hex"),
     plaintext_hex: plaintext.toString("hex"),
   };
 }

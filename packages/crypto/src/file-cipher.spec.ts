@@ -4,13 +4,13 @@ describe("encryptFile / decryptFile", () => {
   it("CR-01: round-trips a 1 KB payload", () => {
     const plaintext = Buffer.from("x".repeat(1024));
     const { blob, kFile } = encryptFile(plaintext);
-    expect(decryptFile(blob, kFile)).toEqual(plaintext);
+    expect(Buffer.from(decryptFile(blob, kFile))).toEqual(plaintext);
   });
 
   it("CR-13: round-trips a 1-byte payload", () => {
     const plaintext = Buffer.from([0x42]);
     const { blob, kFile } = encryptFile(plaintext);
-    expect(decryptFile(blob, kFile)).toEqual(plaintext);
+    expect(Buffer.from(decryptFile(blob, kFile))).toEqual(plaintext);
   });
 
   it("CR-07: flipping one bit in the ciphertext fails decryption", () => {
@@ -25,16 +25,16 @@ describe("encryptFile / decryptFile", () => {
     const plaintext = Buffer.from("same file, twice");
     const a = encryptFile(plaintext);
     const b = encryptFile(plaintext);
-    expect(a.kFile.equals(b.kFile)).toBe(false);
-    expect(a.blob.subarray(0, 12).equals(b.blob.subarray(0, 12))).toBe(false);
-    expect(a.blob.equals(b.blob)).toBe(false);
+    expect(a.kFile).not.toEqual(b.kFile);
+    expect(a.blob.subarray(0, 12)).not.toEqual(b.blob.subarray(0, 12));
+    expect(a.blob).not.toEqual(b.blob);
   });
 
   it("CR-15: 10,000 encryptions never repeat a nonce", () => {
     const seen = new Set<string>();
     for (let i = 0; i < 10_000; i++) {
       const { blob } = encryptFile(Buffer.from(`row-${i}`));
-      const nonce = blob.subarray(0, 12).toString("hex");
+      const nonce = Buffer.from(blob.subarray(0, 12)).toString("hex");
       expect(seen.has(nonce)).toBe(false);
       seen.add(nonce);
     }

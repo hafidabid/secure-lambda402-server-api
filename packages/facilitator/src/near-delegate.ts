@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { ed25519 } from "@noble/curves/ed25519";
+import { sha256 } from "@noble/hashes/sha256";
 import { KeyPair, KeyType, PublicKey } from "@near-js/crypto";
 import {
   Signature,
@@ -69,7 +69,7 @@ export function decodeSignedDelegate(base64: string): DecodedDelegate {
         }
       : null,
     signature: Buffer.from(sigData),
-    signingHash: createHash("sha256").update(encodeDelegateAction(da)).digest(),
+    signingHash: Buffer.from(sha256(encodeDelegateAction(da))),
   };
 }
 
@@ -98,7 +98,7 @@ export function signDelegatePayment(input: SignDelegatePaymentInput): SignedPaym
   if (!input.quote.assetContract) throw new Error("quote has no assetContract; the NEAR facilitator pays in a NEP-141 token");
   const keyPair = KeyPair.fromString(input.privateKey as `ed25519:${string}`);
   const publicKey = keyPair.getPublicKey();
-  const rawPublicKey = Buffer.from(publicKey.ed25519Key!.data);
+  const rawPublicKey = publicKey.ed25519Key!.data;
   const maxBlockHeight = input.currentBlockHeight + input.ttlBlocks;
 
   const delegateAction = buildDelegateAction({
@@ -107,7 +107,9 @@ export function signDelegatePayment(input: SignDelegatePaymentInput): SignedPaym
     actions: [
       actionCreators.functionCall(
         "ft_transfer",
-        { receiver_id: input.quote.payTo, amount: input.quote.maxAmountRequired, memo: input.quote.nonce },
+        new TextEncoder().encode(
+          JSON.stringify({ receiver_id: input.quote.payTo, amount: input.quote.maxAmountRequired, memo: input.quote.nonce }),
+        ),
         FT_TRANSFER_GAS,
         FT_TRANSFER_DEPOSIT,
       ),
@@ -116,8 +118,7 @@ export function signDelegatePayment(input: SignDelegatePaymentInput): SignedPaym
     maxBlockHeight: BigInt(maxBlockHeight),
     publicKey: new PublicKey({ keyType: KeyType.ED25519, data: rawPublicKey }),
   });
-  const hash = createHash("sha256").update(encodeDelegateAction(delegateAction)).digest();
-  const { signature } = keyPair.sign(hash);
+  const { signature } = keyPair.sign(sha256(encodeDelegateAction(delegateAction)));
   const signed = new SignedDelegate({
     delegateAction,
     signature: new Signature({ keyType: KeyType.ED25519, data: signature }),
@@ -126,14 +127,18 @@ export function signDelegatePayment(input: SignDelegatePaymentInput): SignedPaym
   const unsigned = {
     nonce: input.quote.nonce,
     payerId: input.payerId,
-    payerPublicKey: rawPublicKey.toString("base64"),
+    payerPublicKey: toBase64(rawPublicKey),
     payTo: input.quote.payTo,
     asset: input.quote.asset,
     amount: input.quote.maxAmountRequired,
     validUntil: input.quote.validUntil,
     maxBlockHeight,
   };
-  return { ...unsigned, signedDelegate: Buffer.from(encodeSignedDelegate(signed)).toString("base64") };
+  return { ...unsigned, signedDelegate: toBase64(encodeSignedDelegate(signed)) };
+}
+
+function toBase64(bytes: Uint8Array): string {
+  return btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(""));
 }
 
 /** A fresh random NEAR secret key (`ed25519:<base58>`). Handy for tests and for building deliberately invalid payments. */
