@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Bot, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useWallet } from "@/lib/wallet";
 import { accountExists, MOCKING } from "@/lib/near";
 import { AgentRequest, connectSteps, parseAgentRequest, type ConnectPhase, type ConnectStepKey, type ConnectStepStatus } from "@/lib/connect-agent";
 import { errorMessage, nearToYocto, shortHash } from "@/lib/format";
-import { Btn, CopyIconButton, Engraved, Led, NearLogo, Page, PageError, PageTitle, Panel, Slot, type LedTone } from "@/components/ui";
+import { ClaudeCodeLogo, CodexLogo } from "@/components/instrument/logos";
+import { Btn, CopyIconButton, Led, NearLogo, Page, PageError, PageTitle, Panel, Slot, cn, type LedTone } from "@/components/ui";
 
 const POLL_MS = 3000;
 const POLL_TRIES = 20;
@@ -56,71 +57,77 @@ export function ConnectAgentView() {
     }
   };
 
+  const steps = connectSteps({ walletConnected: wallet.status === "connected", phase, funded });
+  const current = steps.find((step) => step.status === "active")?.key ?? "agent";
+  const busy = phase === "sending" || phase === "confirming";
+
   return (
-    <Page className="max-w-[640px]">
+    <Page className="max-w-[560px]">
       <PageTitle>Connect your agent</PageTitle>
-      <Panel className="flex flex-col gap-3">
-        <Engraved className="px-1">Agent wallet</Engraved>
-        <Slot className="flex flex-col gap-3 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Bot className="size-5" />
-            <span className="flex-1 font-readout text-[14px]">{shortHash(request.account, 10)}</span>
-            <CopyIconButton content={request.account} label="Copy agent account" />
-          </div>
-          <p className="text-[14px] leading-relaxed text-etch-2">
-            Your AI agent made its own NEAR account; its key never left your computer. Send it <strong>{request.budgetNear} NEAR</strong>{" "}
-            from your wallet as a normal transfer. The agent can spend at most what you send, never anything in your own account. Top it up
-            by sending more; stop it by sending nothing more.
-          </p>
+      <Panel className="flex flex-col gap-5">
+        <ConnectProgress steps={steps} busy={busy} />
+        <Slot className="flex flex-col items-start gap-4 px-5 py-5">
+          <p className="text-[18px] font-semibold leading-snug">{headline(current, phase, funded, request.budgetNear)}</p>
+          {current === "wallet" && (
+            <Btn className="h-11 px-5" onClick={wallet.connect} disabled={wallet.status !== "disconnected"}>
+              <NearLogo />
+              Connect wallet
+            </Btn>
+          )}
+          {current === "approve" && (
+            <Btn className="h-11 px-5" onClick={() => void send()} disabled={phase !== "ready"}>
+              {phase === "sending" && <Loader2 className="size-4 animate-spin" />}
+              {phase === "sending" ? "Approve in your wallet" : `Send ${request.budgetNear} NEAR`}
+            </Btn>
+          )}
+          {error && <p className="text-[13px] text-etch-2">{error}</p>}
         </Slot>
-        <Slot>
-          <ol aria-label="Connection progress">
-            {connectSteps({ walletConnected: wallet.status === "connected", phase, funded }).map(({ key, status }) => (
-              <li key={key} className="flex flex-wrap items-center gap-3 border-b border-chassis-deep/50 px-4 py-3.5 last:border-0">
-                <Led tone={STEP_TONE[status]} pulse={status === "active" && (phase === "sending" || phase === "confirming")} />
-                <span className={status === "pending" ? "flex-1 text-[15px] text-etch-3" : "flex-1 text-[15px] font-medium"}>
-                  {stepLabel(key, request.budgetNear)}
-                  <span className="sr-only"> ({status})</span>
-                </span>
-                {status === "active" && key === "wallet" && (
-                  <Btn variant="outline" className="h-9 px-4 text-[14px]" onClick={wallet.connect} disabled={wallet.status !== "disconnected"}>
-                    <NearLogo />
-                    Connect wallet
-                  </Btn>
-                )}
-                {status === "active" && key === "approve" && (
-                  <Btn className="h-9 px-4 text-[14px]" onClick={() => void send()} disabled={phase !== "ready"}>
-                    {phase === "sending" && <Loader2 className="size-4 animate-spin" />}
-                    {phase === "sending" ? "Approve in your wallet" : `Send ${request.budgetNear} NEAR`}
-                  </Btn>
-                )}
-                {status === "active" && key === "confirm" && phase === "confirming" && (
-                  <span className="flex items-center gap-2 text-[13px] text-etch-3">
-                    <Loader2 className="size-4 animate-spin" />
-                    Waiting for the transfer to land
-                  </span>
-                )}
-                {status === "done" && key === "agent" && (
-                  <span className="w-full pl-[22px] text-[13px] text-etch-2">Ask your agent to check agent_wallet_status, then run.</span>
-                )}
-              </li>
-            ))}
-          </ol>
-        </Slot>
-        {phase === "done" && !funded && (
-          <p className="px-1 text-[13px] text-etch-2">The wallet finished, but the account is not visible on chain yet. Refresh in a minute.</p>
-        )}
-        {error && <p className="px-1 text-[13px] text-etch-2">{error}</p>}
+        <div className="flex items-center gap-2 px-1 font-readout text-[13px] text-etch-3">
+          <span className="flex shrink-0 items-center gap-2 text-etch">
+            <ClaudeCodeLogo className="size-5" />
+            <CodexLogo className="size-5" />
+          </span>
+          <span className="min-w-0 truncate">{shortHash(request.account, 8)}</span>
+          <CopyIconButton content={request.account} label="Copy agent account" />
+          <span className="ml-auto shrink-0">Budget {request.budgetNear} NEAR</span>
+        </div>
       </Panel>
     </Page>
   );
 }
 
+const STEP_LABEL: Record<ConnectStepKey, string> = { wallet: "Wallet", approve: "Send", confirm: "Confirm", agent: "Ready" };
 const STEP_TONE: Record<ConnectStepStatus, LedTone> = { done: "ok", active: "signal", pending: "off" };
 
-function stepLabel(key: ConnectStepKey, budgetNear: string): string {
-  if (key === "wallet") return "Connect your NEAR wallet";
-  if (key === "approve") return `Send ${budgetNear} NEAR to the agent`;
-  if (key === "confirm") return "Confirm on NEAR testnet";
-  return "Go back to your agent";
+function ConnectProgress({ steps, busy }: { steps: { key: ConnectStepKey; status: ConnectStepStatus }[]; busy: boolean }) {
+  return (
+    <ol aria-label="Connection progress" className="grid grid-cols-4 px-1">
+      {steps.map(({ key, status }, i) => (
+        <li key={key} className="relative flex flex-col items-center gap-2">
+          {i > 0 && (
+            <span
+              aria-hidden="true"
+              className={cn(
+                "absolute left-[calc(-50%+10px)] right-[calc(50%+10px)] top-[4px] h-0.5 rounded-full transition-colors duration-300",
+                status === "pending" ? "bg-chassis-deep" : "bg-led",
+              )}
+            />
+          )}
+          <Led tone={STEP_TONE[status]} pulse={status === "active" && busy} className="relative" />
+          <span className={cn("font-engraved text-[12px] font-semibold uppercase tracking-[0.12em]", status === "pending" ? "text-etch-3" : "text-etch")}>
+            {STEP_LABEL[key]}
+            <span className="sr-only"> ({status})</span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function headline(current: ConnectStepKey, phase: ConnectPhase, funded: boolean, budgetNear: string): string {
+  if (funded) return "Connected. Go back to your agent.";
+  if (current === "wallet") return "Connect the wallet that funds your agent.";
+  if (current === "approve") return `Send ${budgetNear} NEAR. Your agent can spend only this.`;
+  if (phase === "done") return "Sent, but not visible yet. Refresh in a minute.";
+  return "Confirming on NEAR…";
 }
