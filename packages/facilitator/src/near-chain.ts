@@ -79,6 +79,26 @@ export class NearRpcReader {
     }
   }
 
+  /**
+   * Is this key a full-access key on the account? Logging in needs one: a function-call key can be handed to
+   * a dapp for narrow purposes and must not be enough to act as the account here. Missing key or account is false.
+   */
+  async isFullAccessKey(accountId: string, publicKey: string): Promise<boolean> {
+    try {
+      const result = await this.rpc<{ permission?: unknown; error?: string }>("query", {
+        request_type: "view_access_key",
+        finality: "final",
+        account_id: accountId,
+        public_key: publicKey,
+      });
+      return result.error === undefined && result.permission === "FullAccess";
+    } catch (err) {
+      const name = (err as { rpcErrorName?: string }).rpcErrorName;
+      if (name === "UNKNOWN_ACCESS_KEY" || name === "UNKNOWN_ACCOUNT") return false;
+      throw err;
+    }
+  }
+
   async getBalance(accountId: string): Promise<bigint> {
     try {
       const result = await this.rpc<{ amount: string }>("query", {

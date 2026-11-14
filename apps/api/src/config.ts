@@ -34,6 +34,16 @@ const EnvSchema = z.object({
   /** Comma-separated NEAR account ids allowed on seller routes tonight (docs/03 A5/FR-14). */
   SELLER_ALLOW_LIST: z.string().default(""),
 
+  /**
+   * "signed" = callers log in with a NEP-413 signature and send `Authorization: Bearer <session>`; the `x-account-id`
+   * header is ignored. "header" trusts `x-account-id` as-is and exists only for local development and tests.
+   */
+  AUTH_MODE: z.enum(["signed", "header"]).default("signed"),
+  /** The `recipient` a login signature must be made for, so a signature for another service is useless here. */
+  AUTH_AUDIENCE: z.string().min(1).default("securelambda-api"),
+  AUTH_SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
+  AUTH_CHALLENGE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+
   RATE_LIMIT_PER_IP_PER_MINUTE: z.coerce.number().int().positive().default(60),
 });
 
@@ -43,6 +53,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const result = EnvSchema.safeParse(env);
   if (!result.success) {
     throw new Error(`invalid environment configuration: ${result.error.message}`);
+  }
+  if (result.data.NODE_ENV === "production" && result.data.AUTH_MODE === "header") {
+    throw new Error("AUTH_MODE=header trusts a client-supplied account id and is not allowed in production");
   }
   return result.data;
 }

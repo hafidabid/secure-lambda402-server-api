@@ -5,3 +5,4 @@ export * from "./near-chain";
 export * from "./near-delegate";
 export * from "./test-helpers";
 export * from "./near-token";
+export * from "./nep413";

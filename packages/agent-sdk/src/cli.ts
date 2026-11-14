@@ -1,4 +1,5 @@
 import { BuyerAgentClient, PaymentSigner } from "./client";
+import { createNearLogin } from "./near-login";
 import { createNearPaymentSigner } from "./near-signer";
 
 /** Signs real NEAR payments when NEAR_ACCOUNT_ID and NEAR_PRIVATE_KEY are set; otherwise fails clearly. */
@@ -32,6 +33,10 @@ async function main(): Promise<void> {
   const client = new BuyerAgentClient({
     baseUrl,
     signer: signerFromEnv(),
+    // Log in as the same account (NEP-413) so the API knows who is paying.
+    headers: process.env.NEAR_ACCOUNT_ID && process.env.NEAR_PRIVATE_KEY
+      ? createNearLogin({ baseUrl, accountId: process.env.NEAR_ACCOUNT_ID, privateKey: process.env.NEAR_PRIVATE_KEY })
+      : undefined,
   });
 
   try {

@@ -100,12 +100,15 @@ What *is* proven here: the seller's dataset and the buyer's model are never visi
 - The **buyer** pays (in wNEAR, from the buyer's own balance); the relayer pays gas only
 - Metrics recomputed independently in TypeScript match the evaluator's
 - A forged payment is refused, and replaying a payment does not charge twice
+- Login is by NEP-413 signature: a typed `x-account-id` is refused, and one account cannot read another's run
 
 **Implemented and tested** (200+ tests, several against real Postgres/Redis): envelope encryption cross-checked between TypeScript and Rust, the full run state machine, the x402 quote → verify → settle flow, the buyer SDK.
 
+**Login:** `POST /v1/auth/challenge` returns a single-use nonce; the caller signs it (NEP-413, no gas, no transaction) with a full-access key of their account and sends it to `POST /v1/auth/login`, which returns a bearer session (1 hour, stored hashed in Redis). The account id on every request comes from that session. The `x-account-id` header is ignored (`AUTH_MODE=signed`, the default); `AUTH_MODE=header` exists for local development only and the API refuses to start with it in production. The SDK does this for you: `createNearLogin(...)` is passed as the client's `headers`, and the CLI logs in with `NEAR_ACCOUNT_ID`/`NEAR_PRIVATE_KEY`. Only the buyer who paid can read a run, its receipt or its event stream.
+
 **Still simulated or missing:**
+- Login has no rate limit on `/auth/challenge` yet beyond the global per-IP limit; sessions cannot be listed or revoked other than by logout or expiry.
 - **No hardware enclave.** The worker runs the real evaluator as a local process (`EVALUATOR_MODE=local`). Those runs are labelled `mode: "local"` and are never reported as attested. The OutLayer TEE client does not exist yet; the `OutLayerClient` interface is ready for it.
-- **Login is not secure.** `x-account-id` is a header anyone can type. Do not expose this to the internet until it is replaced with signed requests (NEP-413).
 - **Sepolia / USDC is not wired.** See "Payment path" below.
 - Escrow/refund contracts, non-logistic-regression models, the dashboard, NEAR mainnet.
 

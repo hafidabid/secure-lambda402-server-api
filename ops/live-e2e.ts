@@ -16,9 +16,9 @@
  */
 import { randomUUID } from "node:crypto";
 import { DeleteObjectsCommand, GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
-import { BuyerAgentClient, createNearPaymentSigner } from "@securelambda/agent-sdk";
+import { BuyerAgentClient, createNearLogin, createNearPaymentSigner } from "@securelambda/agent-sdk";
 import { sealFile } from "@securelambda/crypto";
-import { NearRpcReader, ensureRegisteredOnToken, randomNearPrivateKey, signDelegatePayment, unwrapNear } from "@securelambda/facilitator";
+import { NearRpcReader, ensureRegisteredOnToken, randomNearPrivateKey, signDelegatePayment, signNep413, unwrapNear } from "@securelambda/facilitator";
 import type { SignedPayment } from "@securelambda/schemas";
 
 function env(name: string): string {
@@ -46,9 +46,17 @@ function check(label: string, ok: boolean, detail = ""): void {
 const step = (title: string) => console.log(`\n== ${title}`);
 const fmt = (yocto: bigint) => `${Number(yocto / 10n ** 20n) / 1e4} NEAR`;
 
-async function api(path: string, init: RequestInit & { account?: string } = {}) {
+// One real NEP-413 login per account, reused. All three accounts accept the same full-access key.
+const logins = new Map<string, () => Promise<Record<string, string>>>();
+const loginFor = (account: string) => {
+  if (!logins.has(account)) logins.set(account, createNearLogin({ baseUrl: API, accountId: account, privateKey: NEAR_KEY }));
+  return logins.get(account)!;
+};
+
+async function api(path: string, init: RequestInit & { account?: string; spoofAccountHeader?: string } = {}) {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
-  if (init.account) headers["x-account-id"] = init.account;
+  if (init.account) Object.assign(headers, await loginFor(init.account)());
+  if (init.spoofAccountHeader) headers["x-account-id"] = init.spoofAccountHeader;
   const res = await fetch(`${API}/v1${path}`, { ...init, headers });
   const text = await res.text();
   let body: any;
@@ -210,7 +218,7 @@ async function main() {
   const agent = new BuyerAgentClient({
     baseUrl: API,
     signer: async (q) => (sentPayment = await realSigner(q)),
-    headers: { "x-account-id": BUYER },
+    headers: loginFor(BUYER),
     pollIntervalMs: 1500,
     pollTimeoutMs: 240_000,
   });
@@ -229,7 +237,7 @@ async function main() {
   check("row count is only revealed as a bucket", typeof result.result.n_bucket === "string", String(result.result.n_bucket));
 
   step("7. The payment really moved on NEAR testnet");
-  const receipt = (await api(`/runs/${result.run_id}/receipt`)).body;
+  const receipt = (await api(`/runs/${result.run_id}/receipt`, { account: BUYER })).body;
   check("receipt carries a settle transaction hash", !!receipt.settle_tx && !receipt.settle_tx.startsWith("sandbox_"), receipt.settle_tx);
   console.log(`  explorer: https://explorer.testnet.near.org/transactions/${receipt.settle_tx}`);
   const sellerAfter = await sellerTokenAfterSettle(sellerBefore, PRICE);
@@ -255,6 +263,31 @@ async function main() {
   await new Promise((r) => setTimeout(r, 6000));
   const sellerFinal = await near.getTokenBalance(TOKEN, SELLER);
   check("seller balance did not change on replay", sellerFinal === sellerAfter);
+
+  step("9. Login is real: identity cannot be typed in");
+  const evalUrl = `/listings/${listingId}/evaluate`;
+  const evalBody = JSON.stringify({ model_id: modelId });
+  const jsonHeader = { "content-type": "application/json" };
+  const spoofedBuyer = await api(evalUrl, { method: "POST", headers: jsonHeader, body: evalBody, spoofAccountHeader: BUYER });
+  check("evaluate with only an x-account-id header is refused (401)", spoofedBuyer.status === 401, spoofedBuyer.body?.error?.code);
+  const spoofedSeller = await api("/listings", { method: "POST", headers: jsonHeader, body: "{}", spoofAccountHeader: SELLER });
+  check("a seller route with only an x-account-id header is refused (401)", spoofedSeller.status === 401, spoofedSeller.body?.error?.code);
+  const anon = await api(`/runs/${result.run_id}`);
+  check("reading a run with no login is refused (401)", anon.status === 401);
+  const forgedToken = await api(`/runs/${result.run_id}`, { headers: { authorization: "Bearer not-a-real-session" } });
+  check("a made-up bearer token is refused (401)", forgedToken.status === 401, forgedToken.body?.error?.code);
+  const otherReader = await api(`/runs/${result.run_id}`, { account: SELLER });
+  check("another logged-in account cannot read the buyer's run (404)", otherReader.status === 404);
+  const owner = await api(`/runs/${result.run_id}`, { account: BUYER });
+  check("the buyer can read their own run", owner.status === 200 && owner.body.id === result.run_id);
+  const ch = await api("/auth/challenge", { method: "POST", headers: jsonHeader, body: JSON.stringify({ account_id: BUYER }) });
+  const wrongKey = signNep413(randomNearPrivateKey(), { message: ch.body.message, nonce: Buffer.from(ch.body.nonce, "base64"), recipient: ch.body.recipient });
+  const badLogin = await api("/auth/login", {
+    method: "POST",
+    headers: jsonHeader,
+    body: JSON.stringify({ account_id: BUYER, public_key: wrongKey.publicKey, signature: wrongKey.signature, nonce: ch.body.nonce }),
+  });
+  check("login with a key that is not on the account is refused (401)", badLogin.status === 401, badLogin.body?.error?.message);
 
   if (!process.env.KEEP_OBJECTS) {
     // The prefix is unique to this run, so this only removes what this run uploaded.

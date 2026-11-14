@@ -62,11 +62,19 @@ describe("RunsController", () => {
   });
 
   describe("GET /v1/runs/:id", () => {
+    it("AUTH: a run is invisible (404) to any account other than the buyer who paid", async () => {
+      mockPrisma.run.findUnique.mockResolvedValue(createBaseRun());
+
+      await expect(controller.getRun("run_123", "someone_else")).rejects.toThrow(NotFoundException);
+      await expect(controller.getReceipt("run_123", "someone_else")).rejects.toThrow(NotFoundException);
+      await expect(controller.runEvents("run_123", "someone_else")).rejects.toThrow(NotFoundException);
+    });
+
     it("RN-01 (positive): returns a run with null resultJson", async () => {
       const mockRun = createBaseRun();
       mockPrisma.run.findUnique.mockResolvedValue(mockRun);
 
-      const result = await controller.getRun("run_123");
+      const result = await controller.getRun("run_123", "buyer_789");
 
       // Verify result is valid RunSchema
       expect(() => RunSchema.parse(result)).not.toThrow();
@@ -101,7 +109,7 @@ describe("RunsController", () => {
       });
       mockPrisma.run.findUnique.mockResolvedValue(mockRun);
 
-      const result = await controller.getRun("run_123");
+      const result = await controller.getRun("run_123", "buyer_789");
 
       // Verify result is valid RunSchema
       expect(() => RunSchema.parse(result)).not.toThrow();
@@ -119,7 +127,7 @@ describe("RunsController", () => {
     it("RN-01 (negative): non-existent run throws NotFoundException (404)", async () => {
       mockPrisma.run.findUnique.mockResolvedValue(null);
 
-      await expect(controller.getRun("nonexistent")).rejects.toThrow(NotFoundException);
+      await expect(controller.getRun("nonexistent", "buyer_789")).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -142,7 +150,7 @@ describe("RunsController", () => {
       mockPrisma.attestation.findUnique.mockResolvedValue(mockAttestation);
       mockPrisma.payment.findUnique.mockResolvedValue(mockPayment);
 
-      const result = await controller.getReceipt("run_123");
+      const result = await controller.getReceipt("run_123", "buyer_789");
 
       // Verify result is valid ReceiptSchema
       expect(() => ReceiptSchema.parse(result)).not.toThrow();
@@ -161,7 +169,7 @@ describe("RunsController", () => {
       mockPrisma.attestation.findUnique.mockResolvedValue(null);
       mockPrisma.payment.findUnique.mockResolvedValue(null);
 
-      const result = await controller.getReceipt("run_123");
+      const result = await controller.getReceipt("run_123", "buyer_789");
 
       // Verify result is valid ReceiptSchema
       expect(() => ReceiptSchema.parse(result)).not.toThrow();
@@ -185,7 +193,7 @@ describe("RunsController", () => {
       mockPrisma.attestation.findUnique.mockResolvedValue(null);
       mockPrisma.payment.findUnique.mockResolvedValue(mockPayment);
 
-      const result = await controller.getReceipt("run_123");
+      const result = await controller.getReceipt("run_123", "buyer_789");
 
       expect(result.exec_tx).toBe("");
       expect(result.settle_tx).toBeNull();
@@ -196,7 +204,7 @@ describe("RunsController", () => {
     it("RN-* (negative): non-existent run throws NotFoundException (404)", async () => {
       mockPrisma.run.findUnique.mockResolvedValue(null);
 
-      await expect(controller.getReceipt("nonexistent")).rejects.toThrow(NotFoundException);
+      await expect(controller.getReceipt("nonexistent", "buyer_789")).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -206,7 +214,7 @@ describe("RunsController", () => {
       controller.setSseInterval(10);
 
       let callCount = 0;
-      const runStates = ["EXECUTING", "EXECUTING", "SETTLED"];
+      const runStates = ["EXECUTING", "EXECUTING", "EXECUTING", "SETTLED"]; // the first read is the ownership check
 
       mockPrisma.run.findUnique.mockImplementation(() => {
         const state = runStates[Math.min(callCount, runStates.length - 1)];
@@ -218,7 +226,7 @@ describe("RunsController", () => {
         );
       });
 
-      const observable = controller.runEvents("run_123");
+      controller.runEvents("run_123", "buyer_789").then((observable) => {
       const events: any[] = [];
 
       observable.subscribe({
@@ -248,6 +256,7 @@ describe("RunsController", () => {
           }
         },
       });
+      }).catch(done);
     });
 
     it("SSE (positive): emits FAILED_NOT_CHARGED as terminal state", (done) => {
@@ -266,7 +275,7 @@ describe("RunsController", () => {
         );
       });
 
-      const observable = controller.runEvents("run_123");
+      controller.runEvents("run_123", "buyer_789").then((observable) => {
       const events: any[] = [];
 
       observable.subscribe({
@@ -286,6 +295,7 @@ describe("RunsController", () => {
           }
         },
       });
+      }).catch(done);
     });
 
     it("SSE (positive): emits PAYMENT_REJECTED as terminal state", (done) => {
@@ -304,7 +314,7 @@ describe("RunsController", () => {
         );
       });
 
-      const observable = controller.runEvents("run_123");
+      controller.runEvents("run_123", "buyer_789").then((observable) => {
       const events: any[] = [];
 
       observable.subscribe({
@@ -324,6 +334,7 @@ describe("RunsController", () => {
           }
         },
       });
+      }).catch(done);
     });
   });
 
@@ -333,7 +344,7 @@ describe("RunsController", () => {
       const mockRun = createBaseRun();
       mockPrisma.run.findUnique.mockResolvedValue(mockRun);
 
-      const result = await controller.getRun("run_123");
+      const result = await controller.getRun("run_123", "buyer_789");
 
       // Verify no camelCase fields exist
       expect(result).not.toHaveProperty("listingId");
@@ -366,7 +377,7 @@ describe("RunsController", () => {
       });
       mockPrisma.run.findUnique.mockResolvedValue(mockRun);
 
-      const result = await controller.getRun("run_123");
+      const result = await controller.getRun("run_123", "buyer_789");
 
       expect(result.exec_tx_hash).toBeNull();
     });
@@ -377,7 +388,7 @@ describe("RunsController", () => {
       });
       mockPrisma.run.findUnique.mockResolvedValue(mockRun);
 
-      const result = await controller.getRun("run_123");
+      const result = await controller.getRun("run_123", "buyer_789");
 
       expect(result.error_code).toBeNull();
     });
@@ -501,12 +512,6 @@ describe("SellerRunsController", () => {
       mockPrisma.listing.findMany.mockResolvedValue([]);
 
       const result = await controller.getSellerRuns(accountId);
-
-      expect(result).toEqual([]);
-    });
-
-    it("US-10 (positive): returns empty array when accountId is missing", async () => {
-      const result = await controller.getSellerRuns(undefined);
 
       expect(result).toEqual([]);
     });

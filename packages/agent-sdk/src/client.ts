@@ -20,8 +20,11 @@ export type PaymentSigner = (quote: X402Accept) => Promise<SignedPayment> | Sign
 export interface BuyerAgentClientOptions {
   baseUrl: string;
   signer: PaymentSigner;
-  /** Extra headers sent on every request, e.g. `{ "x-account-id": "buyer.testnet" }`. */
-  headers?: Record<string, string>;
+  /**
+   * Extra headers sent on every request. A function is called per request, so a session token can be refreshed
+   * (see `createNearLogin`). Not for `x-account-id`: the API ignores it unless it runs in dev header mode.
+   */
+  headers?: Record<string, string> | (() => Promise<Record<string, string>>);
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
 }
@@ -33,7 +36,7 @@ export interface BuyerAgentClientOptions {
 export class BuyerAgentClient {
   private readonly baseUrl: string;
   private readonly signer: PaymentSigner;
-  private readonly extraHeaders: Record<string, string>;
+  private readonly extraHeaders: NonNullable<BuyerAgentClientOptions["headers"]>;
   private readonly pollIntervalMs: number;
   private readonly pollTimeoutMs: number;
 
@@ -45,6 +48,10 @@ export class BuyerAgentClient {
     this.pollTimeoutMs = options.pollTimeoutMs ?? 180000;
   }
 
+  private async authHeaders(): Promise<Record<string, string>> {
+    return typeof this.extraHeaders === "function" ? this.extraHeaders() : this.extraHeaders;
+  }
+
   /**
    * Evaluate a model against a listing, handling x402 payment protocol.
    * Returns the evaluation result once available or settled.
@@ -52,11 +59,12 @@ export class BuyerAgentClient {
   async evaluate(listingId: string, modelId: string): Promise<EvaluateSuccessResponse> {
     const url = `${this.baseUrl}/v1/listings/${listingId}/evaluate`;
     const body = JSON.stringify({ model_id: modelId });
+    const authHeaders = await this.authHeaders();
 
     // First request without payment
     let response = await fetch(url, {
       method: "POST",
-      headers: { ...this.extraHeaders, "Content-Type": "application/json" },
+      headers: { ...authHeaders, "Content-Type": "application/json" },
       body,
     });
 
@@ -79,7 +87,7 @@ export class BuyerAgentClient {
       response = await fetch(url, {
         method: "POST",
         headers: {
-          ...this.extraHeaders,
+          ...authHeaders,
           "Content-Type": "application/json",
           "X-Payment": paymentHeader,
         },
@@ -125,7 +133,7 @@ export class BuyerAgentClient {
       }
 
       // Poll the location
-      const response = await fetch(url, { headers: this.extraHeaders });
+      const response = await fetch(url, { headers: await this.authHeaders() });
       if (!response.ok) {
         throw new Error(`Poll request failed: ${response.status}`);
       }
@@ -140,7 +148,7 @@ export class BuyerAgentClient {
             throw new Error("SETTLED run missing result field");
           }
           // The run object has no payment/attestation data, so ask the receipt endpoint for the real values.
-          const receiptResponse = await fetch(`${url}/receipt`, { headers: this.extraHeaders });
+          const receiptResponse = await fetch(`${url}/receipt`, { headers: await this.authHeaders() });
           const receipt = receiptResponse.ok
             ? ReceiptSchema.parse(await receiptResponse.json())
             : { exec_tx: run.exec_tx_hash ?? "", settle_tx: null, wasm_hash: "", attested: false };

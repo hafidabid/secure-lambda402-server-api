@@ -28,13 +28,15 @@ export class RunsService {
   /**
    * Get a single run by id.
    * RN-01: if run not found, throw NotFoundException (404).
+   * Only the buyer who paid for the run may read it (it carries their result). Anyone else gets the same 404,
+   * so run ids cannot be probed.
    */
-  async getRun(runId: string): Promise<Run> {
+  async getRun(runId: string, accountId: string): Promise<Run> {
     const run = await this.prisma.run.findUnique({
       where: { id: runId },
     });
 
-    if (!run) {
+    if (!run || run.buyerId !== accountId) {
       throw new NotFoundException(`Run not found: ${runId}`);
     }
 
@@ -46,12 +48,12 @@ export class RunsService {
    * RN-*: If run doesn't exist, throw NotFoundException (404).
    * Returns receipt with defaults for missing attestation/payment.
    */
-  async getReceipt(runId: string): Promise<Receipt> {
+  async getReceipt(runId: string, accountId: string): Promise<Receipt> {
     const run = await this.prisma.run.findUnique({
       where: { id: runId },
     });
 
-    if (!run) {
+    if (!run || run.buyerId !== accountId) {
       throw new NotFoundException(`Run not found: ${runId}`);
     }
 

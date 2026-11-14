@@ -42,7 +42,7 @@ export NEAR_NETWORK=testnet NEAR_RPC_URL="${NEAR_RPC_URL:-https://test.rpc.fastn
 export FACILITATOR_MODE=near RELAYER_ACCOUNT="$RELAYER" RELAYER_KEY="$NEAR_ACCOUNT_PRIVATE_KEY"
 export PAYMENT_TOKEN_CONTRACT="${PAYMENT_TOKEN_CONTRACT:-wrap.testnet}"
 export SEED_RELAYER_ID="$RELAYER" SEED_SELLER_ID="seller.$RELAYER" SEED_BUYER_ID="buyer.$RELAYER"
-export SELLER_ALLOW_LIST="$SEED_SELLER_ID" RATE_LIMIT_PER_IP_PER_MINUTE=600
+export AUTH_MODE=signed SELLER_ALLOW_LIST="$SEED_SELLER_ID" RATE_LIMIT_PER_IP_PER_MINUTE=600
 
 # --- build the real evaluator and give it a fresh keypair -------------------------------------
 echo "== building the Rust evaluator (release)"

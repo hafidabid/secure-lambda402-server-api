@@ -238,6 +238,8 @@ ops/live-e2e.sh                  # ~1 minute; cleans up its R2 objects
 KEEP_OBJECTS=1 ops/live-e2e.sh   # keep the uploaded objects
 ```
 
+The script runs the API with `AUTH_MODE=signed` and logs in as the seller and the buyer with real NEP-413 signatures, so it also checks that a typed `x-account-id` is refused.
+
 What it does: starts throwaway Postgres and Redis on ports 55432/56379 (it never touches yours), builds the evaluator, creates a fresh evaluator keypair, seeds, starts the API (port 3917) and worker, then runs `ops/live-e2e.ts`.
 
 **Accounts.** The relayer is the key's own account. The buyer and seller are sub-accounts (`buyer.<relayer>`, `seller.<relayer>`) sharing that key. Create them once:
