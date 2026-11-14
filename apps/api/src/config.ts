@@ -1,0 +1,50 @@
+import { z } from "zod";
+
+/** Env vars per docs/03 B11 "Config". Loaded once at bootstrap via ConfigModule. */
+const EnvSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PORT: z.coerce.number().int().positive().default(3000),
+
+  DATABASE_URL: z.string().min(1),
+  REDIS_URL: z.string().min(1),
+
+  STORAGE_ENDPOINT: z.string().min(1),
+  STORAGE_ACCESS_KEY: z.string().default("securelambda"),
+  STORAGE_SECRET_KEY: z.string().default("securelambda123"),
+  STORAGE_BUCKET: z.string().default("securelambda-assets"),
+  STORAGE_REGION: z.string().default("us-east-1"),
+
+  NEAR_RPC_URL: z.string().default("https://rpc.testnet.near.org"),
+  NEAR_NETWORK: z.string().default("testnet"),
+  RELAYER_ACCOUNT: z.string().optional(),
+  RELAYER_KEY: z.string().optional(),
+
+  OUTLAYER_PROJECT: z.string().optional(),
+
+  MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(1 * 1024 * 1024),
+  PAYMENT_ASSET: z.enum(["near", "usdc"]).default("near"),
+  PAYMENT_VALID_MINUTES: z.coerce.number().int().positive().default(15),
+
+  /** Comma-separated NEAR account ids allowed on seller routes tonight (docs/03 A5/FR-14). */
+  SELLER_ALLOW_LIST: z.string().default(""),
+
+  RATE_LIMIT_PER_IP_PER_MINUTE: z.coerce.number().int().positive().default(60),
+});
+
+export type AppConfig = z.infer<typeof EnvSchema>;
+
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
+  const result = EnvSchema.safeParse(env);
+  if (!result.success) {
+    throw new Error(`invalid environment configuration: ${result.error.message}`);
+  }
+  return result.data;
+}
+
+export function sellerAllowList(config: AppConfig): Set<string> {
+  return new Set(
+    config.SELLER_ALLOW_LIST.split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
+  );
+}

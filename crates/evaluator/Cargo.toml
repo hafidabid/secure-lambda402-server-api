@@ -1,0 +1,28 @@
+[package]
+name = "securelambda-evaluator"
+version = "1.0.0"
+edition = "2021"
+
+[[bin]]
+name = "evaluator"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+hkdf = "0.12"
+sha2 = "0.10"
+aes-gcm = "0.10"
+base64 = "0.22"
+csv = "1"
+
+[dev-dependencies]
+hex = "0.4"
+
+[profile.release]
+# Reproducible, small, deterministic build (docs/03 B2/B5: "Build is reproducible").
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

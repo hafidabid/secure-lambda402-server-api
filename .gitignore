@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+pnpm-lock.yaml.bak
+
+# Rust
+target/
+
+# Prisma
+apps/api/prisma/migrations/.last-generate
+
+# Object store / local data
+ops/minio-data/
+ops/postgres-data/
+
+# Logs
+*.log
