@@ -3,6 +3,7 @@
 import type { Receipt, RunMode, RunResult } from "@securelambda/schemas";
 import type { Stage, StageStatus } from "@/lib/run-stages";
 import { shortHash } from "@/lib/format";
+import { checkEvaluatorHash, type EvaluatorHashCheck } from "@/lib/evaluator-check";
 import { CopyIconButton, Engraved, FlapReadout, Led, Panel, Slot, cn, type LedTone } from "./ui";
 
 function caption(status: StageStatus, key: Stage["key"], seenAt?: string): string {
@@ -110,6 +111,12 @@ function ReceiptRow({ label, value, link, final }: { label: string; value: strin
   );
 }
 
+const HASH_CHECK: Record<EvaluatorHashCheck, { tone: LedTone; text: string }> = {
+  match: { tone: "ok", text: "Matches the build pinned by this listing" },
+  mismatch: { tone: "signal", text: "Differs from the pinned build. Payment is blocked." },
+  unknown: { tone: "off", text: "Not checked yet" },
+};
+
 function attestationText(mode: RunMode, final: boolean, receipt?: Receipt): string {
   if (receipt?.attested) return "Attested by the enclave";
   if (mode === "local") return "Not attested (local mode)";
@@ -117,6 +124,7 @@ function attestationText(mode: RunMode, final: boolean, receipt?: Receipt): stri
 }
 
 export function ReceiptList({ receipt, mode, final }: { receipt?: Receipt; mode: RunMode; final: boolean }) {
+  const hashCheck = checkEvaluatorHash(receipt);
   return (
     <Panel className="flex flex-col gap-3">
       <div className="flex items-center justify-between px-1">
@@ -125,8 +133,15 @@ export function ReceiptList({ receipt, mode, final }: { receipt?: Receipt; mode:
       </div>
       <Slot>
         <ReceiptRow label="Payment" value={receipt?.settle_tx ?? null} link final={final} />
-        <ReceiptRow label="Run" value={receipt?.exec_tx || null} final={final} />
+        <ReceiptRow label="Run" value={receipt?.exec_tx || null} link={mode === "enclave"} final={final} />
         <ReceiptRow label="Evaluator" value={receipt?.wasm_hash || null} final={final} />
+        <div className="flex items-center gap-3 border-b border-chassis-deep/50 px-4 py-2.5 text-[14px]">
+          <span className="w-28 shrink-0 text-etch-3">Build check</span>
+          <span className="flex items-center gap-2">
+            <Led tone={HASH_CHECK[hashCheck].tone} />
+            {HASH_CHECK[hashCheck].text}
+          </span>
+        </div>
         <div className="flex items-center gap-3 px-4 py-2.5 text-[14px]">
           <span className="w-28 shrink-0 text-etch-3">Attestation</span>
           <span className="flex items-center gap-2">

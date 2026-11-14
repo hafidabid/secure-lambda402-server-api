@@ -38,6 +38,7 @@ const LISTING = {
   priceAsset: "near",
   status: "published",
   rulesJson: { runs_per_day: 20, lifetime_budget: 200 },
+  evaluator: { wasmHash: "a".repeat(64) },
 };
 
 const MODEL = { id: "mdl_1", listingId: "lst_1" };
@@ -243,7 +244,7 @@ describe("GatewayService.evaluate", () => {
     };
 
     it("carries the real settle tx and wasm hash, and is attested only for a verified enclave run", async () => {
-      expect(await evaluateSettled("enclave")).toEqual({ exec_tx: "tx_exec", settle_tx: "SETTLE_HASH", wasm_hash: "a".repeat(64), attested: true });
+      expect(await evaluateSettled("enclave")).toEqual({ exec_tx: "tx_exec", settle_tx: "SETTLE_HASH", wasm_hash: "a".repeat(64), pinned_wasm_hash: "a".repeat(64), attested: true });
     });
 
     it("never reports a local (non-TEE) run as attested, even when the wasm hash matched", async () => {

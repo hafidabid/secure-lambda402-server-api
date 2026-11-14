@@ -14,6 +14,8 @@ export const ReceiptSchema = z.object({
   exec_tx: z.string(),
   settle_tx: z.string().nullable(),
   wasm_hash: z.string(),
+  // Optional so a dashboard deployed ahead of the API still parses older receipts.
+  pinned_wasm_hash: z.string().optional(),
   attested: z.boolean(),
 });
 export type Receipt = z.infer<typeof ReceiptSchema>;

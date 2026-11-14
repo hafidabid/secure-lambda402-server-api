@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Run, Receipt } from "@securelambda/schemas";
 import { PrismaService } from "../common/prisma.service";
+import { loadReceipt } from "../common/receipt";
 
 /** Convert a DB run (with camelCase, Json resultJson) to API format (snake_case, mapped result). */
 export function toRunDto(dbRun: any): Run {
@@ -57,20 +58,7 @@ export class RunsService {
       throw new NotFoundException(`Run not found: ${runId}`);
     }
 
-    const attestation = await this.prisma.attestation.findUnique({
-      where: { runId },
-    });
-
-    const payment = await this.prisma.payment.findUnique({
-      where: { runId },
-    });
-
-    return {
-      exec_tx: run.execTxHash ?? "",
-      settle_tx: payment?.settleTxHash ?? null,
-      wasm_hash: attestation?.wasmHash ?? "",
-      attested: run.mode === "enclave" && (attestation?.verified ?? false),
-    };
+    return loadReceipt(this.prisma, run);
   }
 
   /**

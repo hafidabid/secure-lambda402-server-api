@@ -123,7 +123,8 @@ function current(id: string): { run: Run; receipt: Receipt } | null {
   const receipt: Receipt = {
     exec_tx: run.exec_tx_hash ?? "",
     settle_tx: state === "SETTLED" ? "67fYJJ4Gk9xQ2mVt7bRw3nPy6cJs8dLh1aHf7sP1aZ" : null,
-    wasm_hash: EVALUATOR.wasm_hash,
+    wasm_hash: started ? EVALUATOR.wasm_hash : "",
+    pinned_wasm_hash: EVALUATOR.wasm_hash,
     attested: hasResult && entry.run.mode === "enclave",
   };
   return { run, receipt };

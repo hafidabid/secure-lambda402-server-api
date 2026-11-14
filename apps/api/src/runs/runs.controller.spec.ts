@@ -17,6 +17,7 @@ describe("RunsController", () => {
     },
     listing: {
       findMany: jest.fn(),
+      findUnique: jest.fn(async () => ({ evaluator: { wasmHash: "pinned_hash" } })),
     },
     attestation: {
       findUnique: jest.fn(),

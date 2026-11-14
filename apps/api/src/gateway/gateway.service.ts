@@ -13,6 +13,7 @@ import {
   type X402Quote,
 } from "@securelambda/schemas";
 import { PrismaService } from "../common/prisma.service";
+import { loadReceipt } from "../common/receipt";
 import { RedisService } from "../common/redis.service";
 import type { AppConfig } from "../config";
 import type { FacilitatorPort } from "@securelambda/facilitator";
@@ -224,6 +225,7 @@ export class GatewayService {
 
   private async buildResponseForRun(run: {
     id: string;
+    listingId: string;
     state: string;
     mode: string;
     resultJson: unknown;
@@ -231,23 +233,13 @@ export class GatewayService {
     errorCode: string | null;
   }): Promise<EvaluateResult> {
     if (run.state === "SETTLED" && run.resultJson) {
-      const [payment, attestation] = await Promise.all([
-        this.prisma.payment.findUnique({ where: { runId: run.id } }),
-        this.prisma.attestation.findUnique({ where: { runId: run.id } }),
-      ]);
       return {
         kind: "success",
         body: {
           run_id: run.id,
           mode: run.mode as "enclave" | "local",
           result: run.resultJson as EvaluateSuccessResponse["result"],
-          receipt: {
-            exec_tx: run.execTxHash ?? "",
-            settle_tx: payment?.settleTxHash ?? null,
-            wasm_hash: attestation?.wasmHash ?? "",
-            // Only a verified TEE run counts. A "local" run matched the wasm hash but never ran in an enclave.
-            attested: run.mode === "enclave" && (attestation?.verified ?? false),
-          },
+          receipt: await loadReceipt(this.prisma, run),
         },
       };
     }
