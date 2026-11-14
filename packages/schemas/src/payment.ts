@@ -13,6 +13,12 @@ export const X402AcceptSchema = z.object({
   asset: PaymentAssetSchema,
   maxAmountRequired: z.string().regex(/^\d+$/),
   payTo: z.string().min(1),
+  /**
+   * The NEP-141 token contract the buyer pays in (e.g. `wrap.testnet` for wNEAR). Required by the
+   * real NEAR facilitator: a native NEAR transfer inside a delegate action would be paid by the
+   * relayer, not the buyer, so payments move a fungible token via `ft_transfer` instead.
+   */
+  assetContract: z.string().min(1).optional(),
   resource: z.string().min(1),
   validUntil: z.string().datetime(),
   nonce: z.string().min(1),
@@ -28,7 +34,8 @@ export type X402Quote = z.infer<typeof X402QuoteSchema>;
 /**
  * Signed payment retried by the agent after the first 402 (docs/03 section
  * 5, B6). `signedDelegate` is the base64-encoded NEP-366 signed delegate
- * action naming the transfer; `maxBlockHeight` bounds its validity window.
+ * action (an `ft_transfer` on the quoted token contract in the real facilitator);
+ * `maxBlockHeight` bounds its validity window.
  */
 export const SignedPaymentSchema = z.object({
   nonce: z.string().min(1),

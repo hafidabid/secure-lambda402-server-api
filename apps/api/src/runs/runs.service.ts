@@ -67,7 +67,7 @@ export class RunsService {
       exec_tx: run.execTxHash ?? "",
       settle_tx: payment?.settleTxHash ?? null,
       wasm_hash: attestation?.wasmHash ?? "",
-      attested: attestation?.verified ?? false,
+      attested: run.mode === "enclave" && (attestation?.verified ?? false),
     };
   }
 

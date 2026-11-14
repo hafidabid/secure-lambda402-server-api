@@ -8,9 +8,12 @@ export interface StorageClient {
 export class S3StorageClient implements StorageClient {
   private readonly client: S3Client;
   private readonly bucket: string;
+  private readonly keyPrefix: string;
 
-  constructor(opts: { endpoint: string; region: string; accessKeyId: string; secretAccessKey: string; bucket: string }) {
+  constructor(opts: { endpoint: string; region: string; accessKeyId: string; secretAccessKey: string; bucket: string; keyPrefix?: string }) {
     this.bucket = opts.bucket;
+    const prefix = (opts.keyPrefix ?? "").replace(/^\/+|\/+$/g, "");
+    this.keyPrefix = prefix ? `${prefix}/` : "";
     this.client = new S3Client({
       endpoint: opts.endpoint,
       region: opts.region,
@@ -20,7 +23,7 @@ export class S3StorageClient implements StorageClient {
   }
 
   async getCiphertext(key: string): Promise<Buffer> {
-    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.keyPrefix + key }));
     const chunks: Buffer[] = [];
     for await (const chunk of result.Body as AsyncIterable<Buffer>) {
       chunks.push(Buffer.from(chunk));

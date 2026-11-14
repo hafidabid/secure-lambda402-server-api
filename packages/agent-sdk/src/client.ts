@@ -7,6 +7,7 @@ import {
   EvaluateSuccessResponse,
   EvaluatePendingResponseSchema,
   RunSchema,
+  ReceiptSchema,
   isTerminal,
 } from "@securelambda/schemas";
 
@@ -19,6 +20,8 @@ export type PaymentSigner = (quote: X402Accept) => Promise<SignedPayment> | Sign
 export interface BuyerAgentClientOptions {
   baseUrl: string;
   signer: PaymentSigner;
+  /** Extra headers sent on every request, e.g. `{ "x-account-id": "buyer.testnet" }`. */
+  headers?: Record<string, string>;
   pollIntervalMs?: number;
   pollTimeoutMs?: number;
 }
@@ -30,12 +33,14 @@ export interface BuyerAgentClientOptions {
 export class BuyerAgentClient {
   private readonly baseUrl: string;
   private readonly signer: PaymentSigner;
+  private readonly extraHeaders: Record<string, string>;
   private readonly pollIntervalMs: number;
   private readonly pollTimeoutMs: number;
 
   constructor(options: BuyerAgentClientOptions) {
     this.baseUrl = options.baseUrl;
     this.signer = options.signer;
+    this.extraHeaders = options.headers ?? {};
     this.pollIntervalMs = options.pollIntervalMs ?? 3000;
     this.pollTimeoutMs = options.pollTimeoutMs ?? 180000;
   }
@@ -51,7 +56,7 @@ export class BuyerAgentClient {
     // First request without payment
     let response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...this.extraHeaders, "Content-Type": "application/json" },
       body,
     });
 
@@ -74,6 +79,7 @@ export class BuyerAgentClient {
       response = await fetch(url, {
         method: "POST",
         headers: {
+          ...this.extraHeaders,
           "Content-Type": "application/json",
           "X-Payment": paymentHeader,
         },
@@ -82,7 +88,10 @@ export class BuyerAgentClient {
 
       // Check if we got another 402 (payment rejected)
       if (response.status === 402) {
-        throw new Error("payment rejected");
+        // The gateway says why (e.g. PAYMENT_INVALID: insufficient balance); pass that on instead of a bare "rejected".
+        const body = (await response.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+        const detail = body.error ? `: ${body.error.code} - ${body.error.message}` : "";
+        throw new Error(`payment rejected${detail}`);
       }
     }
 
@@ -116,7 +125,7 @@ export class BuyerAgentClient {
       }
 
       // Poll the location
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: this.extraHeaders });
       if (!response.ok) {
         throw new Error(`Poll request failed: ${response.status}`);
       }
@@ -130,16 +139,16 @@ export class BuyerAgentClient {
           if (!run.result) {
             throw new Error("SETTLED run missing result field");
           }
+          // The run object has no payment/attestation data, so ask the receipt endpoint for the real values.
+          const receiptResponse = await fetch(`${url}/receipt`, { headers: this.extraHeaders });
+          const receipt = receiptResponse.ok
+            ? ReceiptSchema.parse(await receiptResponse.json())
+            : { exec_tx: run.exec_tx_hash ?? "", settle_tx: null, wasm_hash: "", attested: false };
           return EvaluateSuccessResponseSchema.parse({
             run_id: run.id,
             mode: run.mode,
             result: run.result,
-            receipt: {
-              exec_tx: run.exec_tx_hash ?? "",
-              settle_tx: null,
-              wasm_hash: "",
-              attested: run.mode === "enclave",
-            },
+            receipt,
           });
         }
 

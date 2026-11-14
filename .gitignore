@@ -21,3 +21,5 @@ ops/postgres-data/
 
 # Logs
 *.log
+secret
+.live/

@@ -12,6 +12,8 @@
     "lint": "echo no-op"
   },
   "dependencies": {
+    "@near-js/crypto": "^1.4.2",
+    "@securelambda/facilitator": "0.1.0",
     "@securelambda/schemas": "0.1.0"
   },
   "devDependencies": {

@@ -1,8 +1,22 @@
 import { BuyerAgentClient, PaymentSigner } from "./client";
+import { createNearPaymentSigner } from "./near-signer";
 
-const notImplementedSigner: PaymentSigner = () => {
-  throw new Error("not implemented — plug in a real NEAR wallet signer");
-};
+/** Signs real NEAR payments when NEAR_ACCOUNT_ID and NEAR_PRIVATE_KEY are set; otherwise fails clearly. */
+function signerFromEnv(): PaymentSigner {
+  const accountId = process.env.NEAR_ACCOUNT_ID;
+  const privateKey = process.env.NEAR_PRIVATE_KEY;
+  if (!accountId || !privateKey) {
+    return () => {
+      throw new Error("set NEAR_ACCOUNT_ID and NEAR_PRIVATE_KEY (optionally NEAR_RPC_URL) to pay for runs");
+    };
+  }
+  return createNearPaymentSigner({
+    accountId,
+    privateKey,
+    rpcUrl: process.env.NEAR_RPC_URL,
+    autoWrapNear: process.env.NEAR_AUTO_WRAP === "1", // spends the buyer's NEAR to top up wNEAR
+  });
+}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -17,7 +31,7 @@ async function main(): Promise<void> {
 
   const client = new BuyerAgentClient({
     baseUrl,
-    signer: notImplementedSigner,
+    signer: signerFromEnv(),
   });
 
   try {

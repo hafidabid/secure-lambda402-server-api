@@ -13,11 +13,17 @@ const EnvSchema = z.object({
   STORAGE_SECRET_KEY: z.string().default("securelambda123"),
   STORAGE_BUCKET: z.string().default("securelambda-assets"),
   STORAGE_REGION: z.string().default("us-east-1"),
+  /** Optional folder inside the bucket, so one bucket (e.g. Cloudflare R2) can be shared safely. */
+  STORAGE_KEY_PREFIX: z.string().default(""),
 
-  NEAR_RPC_URL: z.string().default("https://rpc.testnet.near.org"),
+  NEAR_RPC_URL: z.string().default("https://test.rpc.fastnear.com"),
   NEAR_NETWORK: z.string().default("testnet"),
   RELAYER_ACCOUNT: z.string().optional(),
   RELAYER_KEY: z.string().optional(),
+  /** "sandbox" = Redis ledger (no chain). "near" = real NEP-366 delegate actions settled on NEAR. */
+  /** NEP-141 token contract buyers pay in, e.g. wrap.testnet (wNEAR). Required when FACILITATOR_MODE=near. */
+  PAYMENT_TOKEN_CONTRACT: z.string().optional(),
+  FACILITATOR_MODE: z.enum(["sandbox", "near"]).default("sandbox"),
 
   OUTLAYER_PROJECT: z.string().optional(),
 
