@@ -24,6 +24,10 @@ export interface NearOutLayerOptions {
   maxExecutionSeconds?: number;
   maxInstructions?: number;
   maxMemoryMb?: number;
+  /** How long a transaction may stay unknown to the network before it is treated as dropped (default 2 minutes). */
+  notObservedGraceMs?: number;
+  /** Clock, injectable for tests. */
+  now?: () => number;
 }
 
 /** JSON-RPC call; injectable so tests need no network. Resolves to the RPC `result`, rejects with `{ rpcError }` on an RPC error. */
@@ -31,12 +35,20 @@ export type RpcCall = (method: string, params: unknown) => Promise<unknown>;
 
 const DEFAULT_DEPOSIT_YOCTO = 2_100_000_000_000_000_000_000n; // 0.0021 NEAR
 const GAS = 300_000_000_000_000n; // 300 TGas, the maximum; unused gas is refunded
+const DEFAULT_NOT_OBSERVED_GRACE_MS = 120_000;
 
 interface RpcFailure {
   rpcError: { name?: string; cause?: { name?: string; info?: { cause?: string } }; message?: string };
 }
 
 const isRpcFailure = (e: unknown): e is RpcFailure => typeof e === "object" && e !== null && "rpcError" in e;
+
+/** The network has no record of this transaction (never included, or dropped), as opposed to "still executing". */
+function isNotObserved(err: unknown): boolean {
+  if (!isRpcFailure(err)) return false;
+  const { cause } = err.rpcError;
+  return cause?.name === "UNKNOWN_TRANSACTION" || cause?.info?.cause === "NOT_OBSERVED" || cause?.info?.cause === "UNKNOWN_TRANSACTION";
+}
 
 function fetchRpc(rpcUrl: string): RpcCall {
   return async (method, params) => {
@@ -72,6 +84,8 @@ class SigningAccount extends Account {
 export class NearOutLayerClient implements OutLayerClient {
   readonly mode = "enclave" as const;
   private signer?: Promise<SigningAccount>;
+  /** When each transaction was first looked for, so a transaction nobody has ever seen is not waited on forever. */
+  private readonly firstSeen = new Map<string, number>();
 
   constructor(
     private readonly opts: NearOutLayerOptions,
@@ -112,7 +126,13 @@ export class NearOutLayerClient implements OutLayerClient {
       actionCreators.functionCall("request_execution", args, GAS, this.opts.depositYocto ?? DEFAULT_DEPOSIT_YOCTO),
     ]);
     await this.rpc("broadcast_tx_async", [Buffer.from(signedTx.encode()).toString("base64")]);
-    return { txHash: baseEncode(hashBytes) };
+    const txHash = baseEncode(hashBytes);
+    this.firstSeen.set(txHash, this.now());
+    return { txHash };
+  }
+
+  private now(): number {
+    return (this.opts.now ?? Date.now)();
   }
 
   async txStatus(txHash: string): Promise<TxStatus> {
@@ -124,10 +144,22 @@ export class NearOutLayerClient implements OutLayerClient {
         wait_until: "FINAL",
       })) as TxStatusResult;
     } catch (err) {
-      // Not indexed yet, still executing, RPC timeout, network blip: all mean "unknown", never a failure.
+      // Still executing, RPC timeout, network blip: all mean "unknown", never a failure.
+      if (isNotObserved(err)) {
+        // A broadcast can be accepted and then dropped, and the network will never learn of it. After a grace period
+        // that is a transient failure, so the worker resubmits instead of blocking on a transaction that does not exist.
+        const first = this.firstSeen.get(txHash) ?? this.now();
+        this.firstSeen.set(txHash, first);
+        if (this.now() - first >= (this.opts.notObservedGraceMs ?? DEFAULT_NOT_OBSERVED_GRACE_MS)) {
+          this.firstSeen.delete(txHash);
+          return { kind: "completed", success: false, transient: true, code: "RUN_TIMEOUT_UNKNOWN", message: "transaction was never observed on chain (dropped)" };
+        }
+        return { kind: "pending" };
+      }
       if (isRpcFailure(err) || err instanceof Error) return { kind: "pending" };
       throw err;
     }
+    this.firstSeen.delete(txHash);
     return parseTxResult(result);
   }
 }
