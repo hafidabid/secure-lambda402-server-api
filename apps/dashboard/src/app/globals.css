@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@theme {
+  --color-paper: #f6f7f9;
+  --color-surface: #ffffff;
+  --color-surface-2: #eef0f3;
+  --color-hover: #f1f2f5;
+  --color-line: #e2e5ea;
+  --color-line-strong: #d3d7de;
+  --color-ink: #0e1116;
+  --color-ink-2: #4a5261;
+  --color-muted: #5b6372;
+  --color-faint: #9aa2b1;
+  --color-code: #1a1f27;
+  --color-code-line: #262c36;
+  --color-code-text: #c9ced6;
+  --color-code-dim: #8a93a3;
+  --color-code-str: #f5c38b;
+  --color-seal: #0e7c6b;
+  --color-seal-strong: #0a5e52;
+  --color-seal-soft: #e3f3ef;
+  --color-seal-deep: #13342f;
+  --color-glow: #5fe0c7;
+  --color-warn: #9a4508;
+  --color-warn-soft: #fdf1e3;
+  --color-danger: #b42318;
+  --color-danger-ink: #7a1a12;
+  --color-danger-soft: #fdecea;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
