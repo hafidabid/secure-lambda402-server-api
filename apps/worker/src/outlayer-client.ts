@@ -14,6 +14,8 @@ export type TxStatus =
  * here).
  */
 export interface OutLayerClient {
+  /** "local" means the evaluator ran on this machine, not in a TEE, so results must never be reported as attested. Defaults to "enclave". */
+  readonly mode?: "enclave" | "local";
   requestExecution(projectId: string, input: EvaluatorInput): Promise<{ txHash: string }>;
   txStatus(txHash: string): Promise<TxStatus>;
 }

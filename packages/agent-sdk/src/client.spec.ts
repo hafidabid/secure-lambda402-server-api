@@ -173,6 +173,13 @@ describe("BuyerAgentClient", () => {
           return;
         }
 
+        // GET /v1/runs/{runId}/receipt, asked for once the run has settled
+        if (req.method === "GET" && path === "/v1/runs/run_async_456/receipt") {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ exec_tx: "tx_exec_async_456", settle_tx: "tx_settle_async_456", wasm_hash: "a".repeat(64), attested: true }));
+          return;
+        }
+
         // GET /v1/runs/{runId} for polling
         if (req.method === "GET" && path.startsWith("/v1/runs/")) {
           pollCount++;
@@ -254,6 +261,8 @@ describe("BuyerAgentClient", () => {
       expect(result.mode).toBe("enclave");
       expect(result.result.metrics.accuracy).toBe(0.88);
       expect(pollCount).toBe(2); // Should have polled twice
+      // The receipt comes from the receipt endpoint, not guessed from the run's mode.
+      expect(result.receipt).toEqual({ exec_tx: "tx_exec_async_456", settle_tx: "tx_settle_async_456", wasm_hash: "a".repeat(64), attested: true });
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

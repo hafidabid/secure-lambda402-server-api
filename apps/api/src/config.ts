@@ -13,11 +13,17 @@ const EnvSchema = z.object({
   STORAGE_SECRET_KEY: z.string().default("securelambda123"),
   STORAGE_BUCKET: z.string().default("securelambda-assets"),
   STORAGE_REGION: z.string().default("us-east-1"),
+  /** Optional folder inside the bucket, so one bucket (e.g. Cloudflare R2) can be shared safely. */
+  STORAGE_KEY_PREFIX: z.string().default(""),
 
-  NEAR_RPC_URL: z.string().default("https://rpc.testnet.near.org"),
+  NEAR_RPC_URL: z.string().default("https://test.rpc.fastnear.com"),
   NEAR_NETWORK: z.string().default("testnet"),
   RELAYER_ACCOUNT: z.string().optional(),
   RELAYER_KEY: z.string().optional(),
+  /** "sandbox" = Redis ledger (no chain). "near" = real NEP-366 delegate actions settled on NEAR. */
+  /** NEP-141 token contract buyers pay in, e.g. wrap.testnet (wNEAR). Required when FACILITATOR_MODE=near. */
+  PAYMENT_TOKEN_CONTRACT: z.string().optional(),
+  FACILITATOR_MODE: z.enum(["sandbox", "near"]).default("sandbox"),
 
   OUTLAYER_PROJECT: z.string().optional(),
 
@@ -28,6 +34,16 @@ const EnvSchema = z.object({
   /** Comma-separated NEAR account ids allowed on seller routes tonight (docs/03 A5/FR-14). */
   SELLER_ALLOW_LIST: z.string().default(""),
 
+  /**
+   * "signed" = callers log in with a NEP-413 signature and send `Authorization: Bearer <session>`; the `x-account-id`
+   * header is ignored. "header" trusts `x-account-id` as-is and exists only for local development and tests.
+   */
+  AUTH_MODE: z.enum(["signed", "header"]).default("signed"),
+  /** The `recipient` a login signature must be made for, so a signature for another service is useless here. */
+  AUTH_AUDIENCE: z.string().min(1).default("securelambda-api"),
+  AUTH_SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(3600),
+  AUTH_CHALLENGE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
+
   RATE_LIMIT_PER_IP_PER_MINUTE: z.coerce.number().int().positive().default(60),
 });
 
@@ -37,6 +53,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const result = EnvSchema.safeParse(env);
   if (!result.success) {
     throw new Error(`invalid environment configuration: ${result.error.message}`);
+  }
+  if (result.data.NODE_ENV === "production" && result.data.AUTH_MODE === "header") {
+    throw new Error("AUTH_MODE=header trusts a client-supplied account id and is not allowed in production");
   }
   return result.data;
 }
