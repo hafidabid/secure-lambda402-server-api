@@ -10,7 +10,8 @@ export interface NearAccountAccess {
   privateKey: string;
 }
 
-const GAS = 100_000_000_000_000n; // 100 Tgas, generous for storage_deposit / near_deposit
+// The sender must hold prepaid gas at a pessimistic price up front; 100 Tgas locked ~0.1 NEAR and failed small wallets.
+const GAS = 30_000_000_000_000n;
 /** 0.0125 NEAR. NEP-145 refunds anything above the real minimum when registration_only is set. */
 const STORAGE_DEPOSIT = 12_500_000_000_000_000_000_000n;
 
