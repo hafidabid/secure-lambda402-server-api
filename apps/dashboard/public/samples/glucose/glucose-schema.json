@@ -1,0 +1,14 @@
+{
+  "task": "binary_classification",
+  "features": [
+    {
+      "name": "age",
+      "type": "int"
+    },
+    {
+      "name": "glucose",
+      "type": "float"
+    }
+  ],
+  "label": "y"
+}

@@ -1,0 +1,11 @@
+{
+  "features": [
+    "age",
+    "glucose"
+  ],
+  "weights": [
+    0.03,
+    0.04
+  ],
+  "bias": -6.2
+}

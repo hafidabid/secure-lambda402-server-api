@@ -1,10 +1,11 @@
 // Generates a deterministic sample dataset + matching model for trying the UI by hand.
-// Usage: node ops/gen-sample-data.mjs   (writes samples/glucose/*)
+// Usage: node ops/gen-sample-data.mjs   (writes samples/glucose/* and the dashboard's downloadable copy)
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "samples", "glucose");
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const OUTS = [join(ROOT, "samples", "glucose"), join(ROOT, "apps", "dashboard", "public", "samples", "glucose")];
 const N = 240;
 
 let seed = 42;
@@ -29,8 +30,10 @@ const schema = {
   label: "y",
 };
 
-mkdirSync(OUT, { recursive: true });
-writeFileSync(join(OUT, "glucose.csv"), csv);
-writeFileSync(join(OUT, "glucose-model.json"), JSON.stringify(model, null, 2) + "\n");
-writeFileSync(join(OUT, "glucose-schema.json"), JSON.stringify(schema, null, 2) + "\n");
-console.log(`wrote ${N} rows to ${OUT}`);
+for (const out of OUTS) {
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, "glucose.csv"), csv);
+  writeFileSync(join(out, "glucose-model.json"), JSON.stringify(model, null, 2) + "\n");
+  writeFileSync(join(out, "glucose-schema.json"), JSON.stringify(schema, null, 2) + "\n");
+  console.log(`wrote ${N} rows to ${out}`);
+}

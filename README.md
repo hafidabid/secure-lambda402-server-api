@@ -26,7 +26,7 @@ The intended privacy boundary is simple: the platform stores encrypted assets; t
 
 ## What the screenshots prove
 
-The public dashboard is a UI preview; its data comes from MSW mocks and is not connected to the live API. Open the deployed page to see the product interface. The repository screenshots below are captured outputs from the end-to-end test workflow, showing the backend and payment path.
+The public dashboard is connected to the live testnet API; its [5-minute guide](https://secure-lambda402-server-api.vercel.app/docs#test-it-in-5-minutes) walks through a run with a sample model. The repository screenshots below are captured outputs from the end-to-end test workflow, showing the backend and payment path.
 
 **1. Seller publishes a listing; the stored object is ciphertext.**
 
@@ -74,8 +74,8 @@ This repo contains a working dashboard, API, worker, evaluator, and agent SDK. T
 
 | Capability | Status in this repo |
 |---|---|
-| Dashboard | Deployed UI preview at Vercel. Its data comes from MSW mocks; it is not wired to the live API. |
-| API, worker, encryption, scoring | Implemented; 199 tests pass (161 TypeScript, 38 Rust). TypeScript and Rust encryption are checked against shared vectors. |
+| Dashboard | Deployed at Vercel against the live testnet API. `dev:mock` runs it locally against MSW mocks. |
+| API, worker, encryption, scoring | Implemented; 277 tests pass (236 TypeScript, 41 Rust). TypeScript and Rust encryption are checked against shared vectors. |
 | NEAR payment | A real paid testnet run is captured in `docs/pr-evidence`; x402 quote, forged-payment rejection, settlement, and replay behavior are exercised. |
 | OutLayer TEE | The `NearOutLayerClient` path is implemented and a separate OutLayer testnet experiment is documented in the project report. The checked-in live E2E capture uses the **local** Rust evaluator, not OutLayer. |
 | Attestation | The worker checks OutLayer’s reported WASM hash against the pinned listing version. This service does not independently verify the Intel TDX quote. A matching WASM hash is not a complete proof of hardware attestation. |
@@ -91,13 +91,14 @@ Requirements: Node.js 20+, npm, Docker, and Rust only if you want to run the Rus
 ```bash
 npm install
 docker compose up -d postgres redis minio
+cp ops/.env.example .env && set -a && . ./.env && set +a   # keep this shell for the steps below
 npm run build --workspace=@securelambda/db
 npm run prisma:migrate:deploy --workspace=@securelambda/db
 npx ts-node ops/seed.ts
 npm run build
 ```
 
-Start the API and worker in separate terminals:
+Start the API and worker in separate terminals, each after `set -a && . ./.env && set +a`:
 
 ```bash
 npm run start --workspace=@securelambda/api
@@ -136,6 +137,14 @@ The live testnet E2E flow needs operator credentials and funded testnet accounts
 | `packages/db` | Prisma schema and migrations |
 | `docs/api` | Integration guide and endpoint reference |
 | `ops` | Seed, preflight, live E2E and deployment runbook |
+
+## Built with
+
+Built during the NEAR Hackathon; the first commit is 2026-11-14 and there is no pre-hackathon baseline. MIT licensed.
+
+**Libraries:** NestJS, Prisma, BullMQ, ioredis, zod, AWS SDK (S3/R2), near-api-js and `@near-js/*`, NEAR Wallet Selector, `@noble/ciphers`, `@noble/curves`, `@noble/hashes`, borsh, Next.js, React, TanStack Query, Tailwind, Radix UI, MSW, shiki, mermaid. Rust: serde, aes-gcm, x25519-dalek, hkdf, sha2, csv. TEE runtime: [OutLayer](https://outlayer.ai/).
+
+**AI tools:** written with Claude Code (Anthropic). Commits it co-authored carry a `Co-Authored-By` trailer.
 
 ## Start here
 
