@@ -14,6 +14,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run build:libs
       - run: npm run typecheck --workspaces --if-present
       - run: npm run lint --workspaces --if-present
       - run: npm run test:ci --workspaces --if-present
@@ -58,6 +59,7 @@ jobs:
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
+      - run: npm run build:libs
       - run: npm run vectors:generate
       - name: decrypt TS-made vectors in Rust
         working-directory: crates/evaluator
