@@ -5,6 +5,7 @@ import { Worker } from "bullmq";
 import Redis from "ioredis";
 import { LocalEvaluatorClient } from "./local-evaluator-client";
 import { MockOutLayerClient } from "./mock-outlayer-client";
+import { NearOutLayerClient } from "./near-outlayer-client";
 import type { OutLayerClient } from "./outlayer-client";
 import { RunProcessor } from "./run-processor";
 import { S3StorageClient } from "./storage-client";
@@ -34,9 +35,22 @@ function buildFacilitator(redis: Redis): FacilitatorPort {
  *  - "mock" (default): canned metrics, used by the state-machine tests.
  *  - "local": the real Rust evaluator binary on this machine. Real decryption and scoring,
  *    but no hardware enclave, so runs are labelled mode="local" and never "attested".
- * There is no OutLayer TEE client yet; see docs/ and the README "What is real".
+ *  - "outlayer": the real evaluator inside OutLayer's TEE, called through NEAR (see near-outlayer-client.ts).
  */
 function buildEvaluator(): OutLayerClient {
+  if (process.env.EVALUATOR_MODE === "outlayer") {
+    const project = need("OUTLAYER_PROJECT");
+    return new NearOutLayerClient({
+      rpcUrl: process.env.NEAR_RPC_URL ?? "https://test.rpc.fastnear.com",
+      networkId: process.env.NEAR_NETWORK ?? "testnet",
+      contractId: process.env.OUTLAYER_CONTRACT ?? "outlayer.testnet",
+      signerAccountId: need("OUTLAYER_SIGNER_ACCOUNT"),
+      signerPrivateKey: need("OUTLAYER_SIGNER_KEY"),
+      project,
+      secretsAccountId: process.env.OUTLAYER_SECRETS_ACCOUNT ?? project.split("/")[0]!,
+      maxExecutionSeconds: process.env.OUTLAYER_MAX_SECONDS ? Number(process.env.OUTLAYER_MAX_SECONDS) : undefined,
+    });
+  }
   if (process.env.EVALUATOR_MODE !== "local") return new MockOutLayerClient();
   return new LocalEvaluatorClient({
     binaryPath: need("EVALUATOR_BIN"),

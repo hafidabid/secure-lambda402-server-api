@@ -108,7 +108,7 @@ What *is* proven here: the seller's dataset and the buyer's model are never visi
 
 **Still simulated or missing:**
 - Login has no rate limit on `/auth/challenge` yet beyond the global per-IP limit; sessions cannot be listed or revoked other than by logout or expiry.
-- **No hardware enclave.** The worker runs the real evaluator as a local process (`EVALUATOR_MODE=local`). Those runs are labelled `mode: "local"` and are never reported as attested. The OutLayer TEE client does not exist yet; the `OutLayerClient` interface is ready for it.
+- **Enclave runs are on testnet only, and the TDX quote itself is not verified yet.** With `EVALUATOR_MODE=outlayer` the worker runs the evaluator in OutLayer's TEE through NEAR; the result and the executed wasm hash are read from the chain and the hash is checked before anything is charged. The Intel TDX attestation quote is not independently verified by this service (the `outlayer-verify` tool can check one offline). `EVALUATOR_MODE=local` still runs the same evaluator as a plain process; those runs are labelled `mode: "local"` and are never reported as attested.
 - **Sepolia / USDC is not wired.** See "Payment path" below.
 - Escrow/refund contracts, non-logistic-regression models, the dashboard, NEAR mainnet.
 

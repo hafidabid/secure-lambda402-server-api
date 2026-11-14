@@ -140,36 +140,74 @@ WHERE version = '1.0.0';
 
 ## Configure OutLayer Deployment
 
-**Status in This Build:** OutLayer TEE access is not available in this development environment. This section documents the deployment model for when real OutLayer credentials are available.
+The evaluator runs in OutLayer's TEE. This was done and verified end to end on NEAR testnet (project `hafidbuild.testnet/secure-lambda-evaluator`).
 
-### Prerequisites (Real Deployment)
+### Prerequisites
 
-1. OutLayer account and project created
-2. Access to OutLayer deployment dashboard and secret management
-3. NEAR testnet account with funds for gas and storage (if using NEAR chain integration)
+- The `outlayer` CLI, logged in (`outlayer login`, then `outlayer whoami`).
+- A NEAR testnet account with a few NEAR (the owner), plus a separate funded **worker account** whose key will sit on the server (below).
+- The evaluator key pair from the previous section.
 
-### Deployment Steps
+### Steps
 
-1. **Create a Secret for the Evaluator Private Key:**
-   - In the OutLayer dashboard, create a project secret (environment variable) named `EVALUATOR_PRIVATE_KEY`
-   - Paste the base64-encoded 32-byte private key (produced above) as the value — not PEM, not hex
-   - This key will be injected into the enclave process at runtime, read directly by `crates/evaluator`'s `main.rs`
+1. **Build, upload, deploy.** The program must be plain `wasm32-wasip1` and must not import `random_get`
+   (OutLayer's runtime does not provide randomness, so a module that imports it fails with the generic
+   `Execution promise failed: Failed.`). Rust's default `HashMap`/`HashSet` pull it in; use `BTreeMap`/`BTreeSet`.
+   Check with `node -e 'console.log(WebAssembly.Module.imports(new WebAssembly.Module(require("fs").readFileSync("evaluator.wasm"))).map(i=>i.name).join(" "))'`.
 
-2. **Deploy the WASM Binary:**
-   - Upload `crates/evaluator/target/wasm32-wasip1/release/evaluator.wasm` to OutLayer (the binary name comes from the `[[bin]] name = "evaluator"` entry in `crates/evaluator/Cargo.toml`)
-   - OutLayer will pin the binary and compute its attestation hash
-   - Verify that the hash matches `EvaluatorVersion.wasmHash` (if it doesn't, the binary was corrupted or rebuilt)
+   ```bash
+   (cd crates/evaluator && cargo build --release --target wasm32-wasip1)
+   outlayer upload crates/evaluator/target/wasm32-wasip1/release/evaluator.wasm   # prints the FastFS URL
+   outlayer deploy secure-lambda-evaluator <FastFS URL> --target wasm32-wasip1    # new version, activated
+   shasum -a 256 crates/evaluator/target/wasm32-wasip1/release/evaluator.wasm      # this is EvaluatorVersion.wasmHash
+   ```
 
-3. **Configure Hash Verification:**
-   - The API/worker must be configured with `OUTLAYER_PROJECT=<your-project-id>`
-   - Note that `E_priv` is never used to sign or verify anything outside the enclave — Intel TDX attestation is a hardware property of the enclave itself, not produced by this key. What the worker checks is simpler and documented in docs/03 B10: the TEE's reported wasm hash is compared against `EvaluatorVersion.wasmHash`; a mismatch blocks settlement and pauses the listing (see `apps/worker/src/run-processor.ts`, the `wasmHash !== run.listing.evaluator.wasmHash` branch)
+   FastFS can return 404 for a few seconds after an upload; wait and retry the deploy.
 
-4. **Test End-to-End:**
-   - Create a listing (seller route), publish it
-   - Upload a model (buyer route)
-   - Call the listing's `/evaluate` route (pay, then poll)
-   - Observe the run progress through the real states this build implements: `REQUESTED` → `PAYMENT_VERIFIED` → `QUEUED` → `SUBMITTED` → `EXECUTING`/`POLLING` → `RESULT_READY` → `SETTLED` (see `packages/schemas/src/run-states.ts` for the full state machine, including the failure branches)
-   - Verify an `Attestation` row was recorded for the run with `verified: true`
+2. **Store the private key as a project secret.** Lock it to the **project** (`--project`). Locking to a wasm hash
+   (`--wasm-hash`/`--build`) did not deliver the secret in our tests.
+
+   ```bash
+   outlayer secrets set '{"EVALUATOR_PRIVATE_KEY":"<base64 private key>"}' \
+     --project <owner>/secure-lambda-evaluator --access allow-all
+   ```
+
+   Anyone who can deploy a new version of that project can read the secret, so keep the owner key private.
+
+3. **Smoke test from the CLI.** Secrets are only attached when you ask for them:
+
+   ```bash
+   outlayer run <owner>/secure-lambda-evaluator --input input.json \
+     --secrets-profile default --secrets-account <owner>
+   ```
+
+   The CLI often prints `the request failed with timeout error` even though the run succeeded. It is a client
+   timeout, not a failure; the result is on chain (this is why the worker polls instead).
+
+4. **Point the worker at it.** In the worker's environment (see `ops/.env.example`):
+   `EVALUATOR_MODE=outlayer`, `OUTLAYER_PROJECT`, `OUTLAYER_SIGNER_ACCOUNT`, `OUTLAYER_SIGNER_KEY`.
+   Create the signer as its own sub-account so the owner's full-access key never leaves your machine:
+   `near account create-account fund-myself worker.<owner> '2 NEAR' autogenerate-new-keypair save-to-legacy-keychain sign-as <owner> network-config testnet sign-with-keychain send`.
+   Each run attaches 0.0021 NEAR; OutLayer keeps about 0.001 and refunds the rest.
+
+5. **Seed the database** with the real values: `EVALUATOR_WASM_HASH`, `EVALUATOR_PUBLIC_KEY_B64`,
+   `EVALUATOR_PROJECT_ID=<owner>/secure-lambda-evaluator`, then `npx ts-node ops/seed.ts`.
+   Files already sealed to an older public key cannot be opened by a new key and must be re-uploaded.
+
+6. **Prove it end to end:** `EVALUATOR_BACKEND=outlayer OUTLAYER_WASM_HASH=<sha256> ops/live-e2e.sh`.
+
+### How the worker talks to OutLayer
+
+`apps/worker/src/near-outlayer-client.ts` signs a `request_execution` call to `outlayer.testnet` and broadcasts it
+with `broadcast_tx_async`, then polls the transaction. A run takes about 2 minutes. "Pending" is never a failure.
+The metrics and the executed wasm hash are read from the chain (the transaction's return value and the contract's
+`execution_completed` event); a hash that differs from `EvaluatorVersion.wasmHash` blocks settlement and pauses
+the listing. OutLayer testnet occasionally fails a run with no detail; the worker retries it as a fresh request
+(at most twice), and the buyer is charged only for a verified success.
+
+Known limits: the whole input travels in the transaction (4 MB protocol limit), so large datasets need OutLayer's
+state-based input; the default limits are 10 seconds, 128 MB and 1e9 instructions per run
+(`OUTLAYER_MAX_SECONDS` raises the first).
 
 ---
 

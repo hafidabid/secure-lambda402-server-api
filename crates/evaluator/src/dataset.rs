@@ -1,7 +1,7 @@
 //! Dataset CSV parsing matching the schema contract (docs/03 section 9:
 //! "UTF-8 CSV with header row", numeric features plus one 0/1 label).
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use crate::error::EvalError;
 use crate::io::SchemaContract;
@@ -24,18 +24,18 @@ pub fn parse(raw: &[u8], schema: &SchemaContract) -> Result<Vec<Row>, EvalError>
         .clone();
 
     let header_names: Vec<&str> = headers.iter().collect();
-    let unique: HashSet<&str> = header_names.iter().copied().collect();
+    let unique: BTreeSet<&str> = header_names.iter().copied().collect();
     if unique.len() != header_names.len() {
         return Err(EvalError::DataUnusable("dataset has a duplicate column name".into()));
     }
 
-    let expected: HashSet<&str> = schema
+    let expected: BTreeSet<&str> = schema
         .features
         .iter()
         .map(|f| f.name.as_str())
         .chain(std::iter::once(schema.label.as_str()))
         .collect();
-    let actual: HashSet<&str> = header_names.iter().copied().collect();
+    let actual: BTreeSet<&str> = header_names.iter().copied().collect();
     if expected != actual {
         return Err(EvalError::DataUnusable("dataset columns do not match the schema".into()));
     }
