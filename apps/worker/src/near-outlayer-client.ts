@@ -1,7 +1,8 @@
-import { KeyPair } from "@near-js/crypto";
-import { actionCreators } from "@near-js/transactions";
-import { baseEncode } from "@near-js/utils";
-import { Account, connect, keyStores } from "near-api-js";
+import { sha256 } from "@noble/hashes/sha256";
+import { KeyPair, KeyType } from "@near-js/crypto";
+import { Signature, SignedTransaction, actionCreators, createTransaction, encodeTransaction } from "@near-js/transactions";
+import { baseDecode, baseEncode } from "@near-js/utils";
+import { z } from "zod";
 import { EvaluatorOutputSchema, type EvaluatorInput } from "@securelambda/schemas";
 import type { OutLayerClient, TxStatus } from "./outlayer-client";
 
@@ -64,12 +65,8 @@ function fetchRpc(rpcUrl: string): RpcCall {
   };
 }
 
-/** Lets the subclass reach near-api-js's protected signer so we can broadcast asynchronously ourselves. */
-class SigningAccount extends Account {
-  sign(receiverId: string, actions: Parameters<Account["signAndSendTransaction"]>[0]["actions"]) {
-    return this.signTransaction(receiverId, actions);
-  }
-}
+const AccessKeySchema = z.object({ nonce: z.union([z.number(), z.string()]) });
+const BlockSchema = z.object({ header: z.object({ hash: z.string() }) });
 
 /**
  * Runs the evaluator in OutLayer's TEE by calling `request_execution` on the OutLayer contract on NEAR.
@@ -83,7 +80,10 @@ class SigningAccount extends Account {
  */
 export class NearOutLayerClient implements OutLayerClient {
   readonly mode = "enclave" as const;
-  private signer?: Promise<SigningAccount>;
+  private keyPair?: KeyPair;
+  private lastNonce = 0n;
+  // Sign and broadcast one request at a time: a later nonce reaching the chain first would invalidate an earlier one.
+  private queue: Promise<unknown> = Promise.resolve();
   /** When each transaction was first looked for, so a transaction nobody has ever seen is not waited on forever. */
   private readonly firstSeen = new Map<string, number>();
 
@@ -92,15 +92,26 @@ export class NearOutLayerClient implements OutLayerClient {
     private readonly rpc: RpcCall = fetchRpc(opts.rpcUrl),
   ) {}
 
-  private getSigner(): Promise<SigningAccount> {
-    this.signer ??= (async () => {
-      const keyStore = new keyStores.InMemoryKeyStore();
-      await keyStore.setKey(this.opts.networkId, this.opts.signerAccountId, KeyPair.fromString(this.opts.signerPrivateKey as `ed25519:${string}`) as never);
-      const near = await connect({ networkId: this.opts.networkId, nodeUrl: this.opts.rpcUrl, keyStore });
-      const base = await near.account(this.opts.signerAccountId);
-      return new SigningAccount((base as unknown as { connection: ConstructorParameters<typeof Account>[0] }).connection, this.opts.signerAccountId);
-    })();
-    return this.signer;
+  // Not near-api-js's Account: it caches the nonce without advancing it, so every request after the first was dropped.
+  private async nextNonce(publicKey: string): Promise<bigint> {
+    const key = AccessKeySchema.parse(
+      await this.rpc("query", { request_type: "view_access_key", finality: "final", account_id: this.opts.signerAccountId, public_key: publicKey }),
+    );
+    const onChain = BigInt(key.nonce);
+    this.lastNonce = (onChain > this.lastNonce ? onChain : this.lastNonce) + 1n;
+    return this.lastNonce;
+  }
+
+  private async signAndBroadcast(actions: ReturnType<typeof actionCreators.functionCall>[]): Promise<string> {
+    this.keyPair ??= KeyPair.fromString(this.opts.signerPrivateKey as `ed25519:${string}`);
+    const publicKey = this.keyPair.getPublicKey();
+    const nonce = await this.nextNonce(publicKey.toString());
+    const block = BlockSchema.parse(await this.rpc("block", { finality: "final" }));
+    const transaction = createTransaction(this.opts.signerAccountId, publicKey, this.opts.contractId, nonce, actions, baseDecode(block.header.hash));
+    const hash = sha256(encodeTransaction(transaction));
+    const signed = new SignedTransaction({ transaction, signature: new Signature({ keyType: KeyType.ED25519, data: this.keyPair.sign(hash).signature }) });
+    await this.rpc("broadcast_tx_async", [Buffer.from(signed.encode()).toString("base64")]);
+    return baseEncode(hash);
   }
 
   async requestExecution(projectId: string, input: EvaluatorInput): Promise<{ txHash: string }> {
@@ -121,12 +132,10 @@ export class NearOutLayerClient implements OutLayerClient {
       params: null,
       payer_account_id: null,
     };
-    const account = await this.getSigner();
-    const [hashBytes, signedTx] = await account.sign(this.opts.contractId, [
-      actionCreators.functionCall("request_execution", args, GAS, this.opts.depositYocto ?? DEFAULT_DEPOSIT_YOCTO),
-    ]);
-    await this.rpc("broadcast_tx_async", [Buffer.from(signedTx.encode()).toString("base64")]);
-    const txHash = baseEncode(hashBytes);
+    const actions = [actionCreators.functionCall("request_execution", args, GAS, this.opts.depositYocto ?? DEFAULT_DEPOSIT_YOCTO)];
+    const sent = this.queue.then(() => this.signAndBroadcast(actions));
+    this.queue = sent.catch(() => undefined);
+    const txHash = await sent;
     this.firstSeen.set(txHash, this.now());
     return { txHash };
   }
