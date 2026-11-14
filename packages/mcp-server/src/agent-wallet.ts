@@ -51,13 +51,25 @@ export interface NearChain {
 const QueryResponseSchema = z.object({ result: z.record(z.string(), z.unknown()).optional(), error: z.unknown().optional() });
 const AccountViewSchema = z.object({ amount: z.string() });
 
+// Public testnet RPC nodes drop connections and rate-limit now and then.
+const RPC_ATTEMPTS = 4;
+
 export function nearChain(rpcUrl: string): NearChain {
+  async function post(body: string): Promise<Response> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const response = await fetch(rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body });
+        if (response.status !== 429 && response.status < 500) return response;
+        if (attempt >= RPC_ATTEMPTS) return response;
+      } catch (error) {
+        if (attempt >= RPC_ATTEMPTS) throw error;
+      }
+      await new Promise((r) => setTimeout(r, 300 * attempt));
+    }
+  }
+
   async function view(params: Record<string, unknown>): Promise<Record<string, unknown> | null> {
-    const response = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: "securelambda-mcp", method: "query", params: { finality: "final", ...params } }),
-    });
+    const response = await post(JSON.stringify({ jsonrpc: "2.0", id: "securelambda-mcp", method: "query", params: { finality: "final", ...params } }));
     if (!response.ok) throw new Error(`NEAR RPC: HTTP ${response.status}`);
     const body = QueryResponseSchema.parse(await response.json());
     // UNKNOWN_ACCOUNT and UNKNOWN_ACCESS_KEY come back as RPC errors; both mean "not there yet".
