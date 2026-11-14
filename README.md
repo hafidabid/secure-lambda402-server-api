@@ -75,7 +75,7 @@ This repo contains a working dashboard, API, worker, evaluator, and agent SDK. T
 | Capability | Status in this repo |
 |---|---|
 | Dashboard | Deployed at Vercel against the live testnet API. `dev:mock` runs it locally against MSW mocks. |
-| API, worker, encryption, scoring | Implemented; 277 tests pass (236 TypeScript, 41 Rust). TypeScript and Rust encryption are checked against shared vectors. |
+| API, worker, encryption, scoring | Implemented; 324 tests pass (283 TypeScript, 41 Rust). TypeScript and Rust encryption are checked against shared vectors. |
 | NEAR payment | A real paid testnet run is captured in `docs/pr-evidence`; x402 quote, forged-payment rejection, settlement, and replay behavior are exercised. |
 | OutLayer TEE | The `NearOutLayerClient` path is implemented and a separate OutLayer testnet experiment is documented in the project report. The checked-in live E2E capture uses the **local** Rust evaluator, not OutLayer. |
 | Attestation | The worker checks OutLayer’s reported WASM hash against the pinned listing version. This service does not independently verify the Intel TDX quote. A matching WASM hash is not a complete proof of hardware attestation. |
@@ -133,6 +133,7 @@ The live testnet E2E flow needs operator credentials and funded testnet accounts
 | `packages/crypto` | Envelope encryption: AES-256-GCM + X25519/HKDF |
 | `packages/facilitator` | x402 quote, verification and settlement; NEAR and sandbox adapters |
 | `packages/agent-sdk` | Buyer client for NEP-413 login and 402 → pay → poll |
+| `packages/mcp-server` | MCP server so Claude Code, Claude Desktop or Codex can browse listings and pay for runs under spend caps |
 | `packages/schemas` | Shared API contracts, validation and run states |
 | `packages/db` | Prisma schema and migrations |
 | `docs/api` | Integration guide and endpoint reference |

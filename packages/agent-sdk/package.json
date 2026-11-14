@@ -14,7 +14,8 @@
   "dependencies": {
     "@near-js/crypto": "^1.4.2",
     "@securelambda/facilitator": "0.1.0",
-    "@securelambda/schemas": "0.1.0"
+    "@securelambda/schemas": "0.1.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "jest": "^29.7.0",

@@ -10,6 +10,15 @@ import {
   ReceiptSchema,
   isTerminal,
 } from "@securelambda/schemas";
+import { z } from "zod";
+
+const ApiErrorBodySchema = z.object({ error: z.object({ code: z.string(), message: z.string() }) });
+
+/** Reads the gateway's `{ error: { code, message } }` body as " CODE - message", or "" when absent. */
+export async function apiErrorDetail(response: Response): Promise<string> {
+  const body = ApiErrorBodySchema.safeParse(await response.json().catch(() => null));
+  return body.success ? ` ${body.data.error.code} - ${body.data.error.message}` : "";
+}
 
 /**
  * Injected signer function that takes a payment quote and returns a signed payment.
@@ -50,6 +59,21 @@ export class BuyerAgentClient {
 
   private async authHeaders(): Promise<Record<string, string>> {
     return typeof this.extraHeaders === "function" ? this.extraHeaders() : this.extraHeaders;
+  }
+
+  /** Fetches the 402 payment quote for a run without signing or paying. */
+  async quote(listingId: string, modelId: string): Promise<X402Accept> {
+    const response = await fetch(`${this.baseUrl}/v1/listings/${listingId}/evaluate`, {
+      method: "POST",
+      headers: { ...(await this.authHeaders()), "Content-Type": "application/json" },
+      body: JSON.stringify({ model_id: modelId }),
+    });
+    if (response.status !== 402) {
+      throw new Error(`quote failed: ${response.status}${await apiErrorDetail(response)}`);
+    }
+    const accept = X402QuoteSchema.parse(await response.json()).accepts[0];
+    if (!accept) throw new Error("No payment accepts in 402 response");
+    return accept;
   }
 
   /**

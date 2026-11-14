@@ -452,4 +452,54 @@ describe("BuyerAgentClient", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  test("quote returns the 402 accept without signing or retrying", async () => {
+    let requests = 0;
+    let authorization: string | undefined;
+    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      requests++;
+      authorization = req.headers["authorization"] as string | undefined;
+      res.writeHead(402, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(makeTestQuote(req.url || "")));
+    });
+    await new Promise<void>((resolve) => server.listen(0, () => resolve()));
+    const baseUrl = `http://localhost:${(server.address() as AddressInfo).port}`;
+
+    let signerCalled = false;
+    const client = new BuyerAgentClient({
+      baseUrl,
+      signer: (q) => {
+        signerCalled = true;
+        return makeTestSignedPayment(q);
+      },
+      headers: { authorization: "Bearer t" },
+    });
+
+    try {
+      const accept = await client.quote("lst_q", "mdl_q");
+      expect(accept.maxAmountRequired).toBe("2000000000000000000000000");
+      expect(accept.payTo).toBe("hospital.testnet");
+      expect(accept.resource).toBe("/v1/listings/lst_q/evaluate");
+      expect(requests).toBe(1);
+      expect(authorization).toBe("Bearer t");
+      expect(signerCalled).toBe(false);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  test("quote throws with the gateway error when the response is not 402", async () => {
+    const server = createServer((_req: IncomingMessage, res: ServerResponse) => {
+      res.writeHead(409, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: { code: "LISTING_NOT_PUBLISHED", message: "draft" } }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, () => resolve()));
+    const baseUrl = `http://localhost:${(server.address() as AddressInfo).port}`;
+    const client = new BuyerAgentClient({ baseUrl, signer: makeTestSignedPayment });
+    try {
+      await expect(client.quote("lst_q", "mdl_q")).rejects.toThrow("quote failed: 409 LISTING_NOT_PUBLISHED - draft");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });

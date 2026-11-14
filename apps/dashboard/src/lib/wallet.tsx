@@ -27,6 +27,7 @@ export interface Wallet {
   signMessage: (input: SignMessageInput) => Promise<{ publicKey: string; signature: string }>;
   addFullAccessKey: (publicKey: string) => Promise<void>;
   deleteKey: (publicKey: string) => Promise<void>;
+  sendNear: (receiverId: string, amountYocto: bigint) => Promise<void>;
 }
 
 const WalletContext = createContext<Wallet | null>(null);
@@ -57,6 +58,7 @@ function useDemoWallet(): Wallet {
     },
     addFullAccessKey: () => tick(700),
     deleteKey: () => tick(500),
+    sendNear: () => tick(900),
   };
 }
 
@@ -116,6 +118,12 @@ function useSelectorWallet(enabled: boolean): Wallet {
       await (await activeWallet()).signAndSendTransaction({
         receiverId: accountId,
         actions: keyAction({ type: "DeleteKey", params: { publicKey } }),
+      });
+    },
+    sendNear: async (receiverId, amountYocto) => {
+      await (await activeWallet()).signAndSendTransaction({
+        receiverId,
+        actions: keyAction({ type: "Transfer", params: { deposit: amountYocto.toString() } }),
       });
     },
   };

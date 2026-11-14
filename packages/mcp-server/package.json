@@ -1,0 +1,30 @@
+{
+  "name": "@securelambda/mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "bin": {
+    "securelambda-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "jest",
+    "test:ci": "jest --ci --coverage",
+    "lint": "echo no-op"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@near-js/crypto": "^1.4.2",
+    "@securelambda/agent-sdk": "0.1.0",
+    "@securelambda/schemas": "0.1.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.6.3",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.1"
+  }
+}

@@ -33,6 +33,11 @@ export async function accessKeyNonce(accountId: string, publicKey: string): Prom
   return parsed.success ? BigInt(parsed.data.nonce) : null;
 }
 
+export async function accountExists(accountId: string): Promise<boolean> {
+  const result = await rpc("query", { request_type: "view_account", finality: "final", account_id: accountId }).catch(() => null);
+  return result !== null;
+}
+
 export async function blockHeight(): Promise<number> {
   if (MOCKING) return 1_000;
   return BlockSchema.parse(await rpc("block", { finality: "final" })).header.height;
