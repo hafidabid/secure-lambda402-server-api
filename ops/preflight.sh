@@ -95,21 +95,21 @@ if ! command -v docker compose &> /dev/null; then
     check_warn "docker compose command not found; skipping service checks"
 else
     # Check postgres
-    if docker compose ps postgres 2>/dev/null | grep -q "postgres.*running"; then
+    if docker compose ps --status running -q postgres 2>/dev/null | grep -q .; then
         check_pass "postgres is running"
     else
         check_fail "postgres is not running (or docker compose is not active)"
     fi
 
     # Check redis
-    if docker compose ps redis 2>/dev/null | grep -q "redis.*running"; then
+    if docker compose ps --status running -q redis 2>/dev/null | grep -q .; then
         check_pass "redis is running"
     else
         check_fail "redis is not running"
     fi
 
     # Check minio
-    if docker compose ps minio 2>/dev/null | grep -q "minio.*running"; then
+    if docker compose ps --status running -q minio 2>/dev/null | grep -q .; then
         check_pass "minio is running"
     else
         check_fail "minio is not running"
