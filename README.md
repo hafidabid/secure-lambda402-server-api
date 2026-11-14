@@ -6,9 +6,9 @@
 
 SecureLambda is a pay-per-run evaluation service for data owners and model builders. A hospital can keep patient records; an AI team can keep its model. SecureLambda brings the two together for a bounded evaluation, then returns rounded metrics instead of either party’s files.
 
-**Try the dashboard preview:** [secure-lambda402.vercel.app](https://secure-lambda402.vercel.app/) · **See the proof:** [a paid NEAR testnet run](https://testnet.nearblocks.io/txns/67fYJJtxNqFM33UeXMWfAvP5ELkp4vDZWnWfQMCJUkXj) · **Read the integration guide:** [docs/api/integration-guide.md](docs/api/integration-guide.md)
+**Try the dashboard preview:** [secure-lambda402.vercel.app](https://secure-lambda402.vercel.app/) · **See the proof:** [a paid run in an OutLayer enclave](docs/pr-evidence/outlayer-enclave-run.md) · **Read the integration guide:** [docs/api/integration-guide.md](docs/api/integration-guide.md)
 
-**Real testnet run:** `accuracy 0.89` · `AUC 0.96` · `F1 0.92` · seller paid on-chain. **Evaluator mode: local, not attested.** [Open the settlement](https://testnet.nearblocks.io/txns/67fYJJtxNqFM33UeXMWfAvP5ELkp4vDZWnWfQMCJUkXj).
+**Enclave run on NEAR testnet:** `accuracy 0.85` · `AUC 0.93` · `F1 0.75` · evaluated in OutLayer, seller paid on-chain. [Execution](https://testnet.nearblocks.io/txns/2xfjVzdvSchKEoPVLnLdttfoSNxxe34Ggf3SGkpUbApf) · [settlement](https://testnet.nearblocks.io/txns/DpXfGrYssCapGHDjjSbxN7uF3PDET6Wiu1X69BPHPyYY) · [run record](docs/pr-evidence/outlayer-enclave-run.md).
 
 > Think of it as a blind date for a model and a dataset: they meet inside a TEE, neither gets the other’s number, and the evaluator sends home three scores.
 
@@ -77,7 +77,7 @@ This repo contains a working dashboard, API, worker, evaluator, and agent SDK. T
 | Dashboard | Deployed at Vercel against the live testnet API. `dev:mock` runs it locally against MSW mocks. |
 | API, worker, encryption, scoring | Implemented; 324 tests pass (283 TypeScript, 41 Rust). TypeScript and Rust encryption are checked against shared vectors. |
 | NEAR payment | A real paid testnet run is captured in `docs/pr-evidence`; x402 quote, forged-payment rejection, settlement, and replay behavior are exercised. |
-| OutLayer TEE | The `NearOutLayerClient` path is implemented and a separate OutLayer testnet experiment is documented in the project report. The checked-in live E2E capture uses the **local** Rust evaluator, not OutLayer. |
+| OutLayer TEE | Live on the testnet API: a paid run executed in OutLayer and settled is [recorded here](docs/pr-evidence/outlayer-enclave-run.md). The [screenshots](#what-the-screenshots-prove) and E2E capture use the **local** Rust evaluator. |
 | Attestation | The worker checks OutLayer’s reported WASM hash against the pinned listing version. This service does not independently verify the Intel TDX quote. A matching WASM hash is not a complete proof of hardware attestation. |
 | Key custody | Tier 1: the operator generates the evaluator key and is trusted to destroy the local copy. In-enclave key generation (Tier 2) is not implemented. |
 | Models / network | Logistic regression JSON only. Current payment and OutLayer examples use NEAR testnet; NEAR mainnet and EVM USDC are not wired. |
